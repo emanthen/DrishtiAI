@@ -222,6 +222,24 @@ services:
       retries: 3
     logging: *default-logging
 
+  # ── Test RTSP server (Phase 1 dev only) ─────────────────────────────────────
+  # mediamtx re-streams a test video as RTSP so the pipeline can be tested
+  # without a real camera. Add your test video as deploy/compose/test-media/test.mp4
+  # Access: rtsp://mediamtx:8554/test
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    environment:
+      MTX_PROTOCOLS: tcp
+    volumes:
+      - ./test-media:/test-media:ro
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "127.0.0.1:8554:8554"
+      - "127.0.0.1:8888:8888"
+    profiles: ["dev"]
+    logging: *default-logging
+
   # ── Observability ────────────────────────────────────────────────────────────
 
   prometheus:

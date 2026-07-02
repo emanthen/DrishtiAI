@@ -1,9 +1,14 @@
 [project]
 name = "drishtiai-pipeline"
-version = "0.0.0"
-description = "DrishtiAI video and ML pipeline (GStreamer + DeepStream)"
+version = "0.1.0"
+description = "DrishtiAI video and ML pipeline"
 requires-python = ">=3.12"
 dependencies = [
+    "opencv-python-headless>=4.10.0.84",
+    "paddlepaddle>=2.6.2",
+    "paddleocr>=2.9.1",
+    "numpy>=1.26.0",
+    "pillow>=10.4.0",
     "redis>=5.0.8",
     "sqlalchemy>=2.0.31",
     "psycopg[binary]>=3.2.1",

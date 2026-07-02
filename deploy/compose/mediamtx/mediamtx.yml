@@ -1,0 +1,11 @@
+logLevel: info
+logDestinations: [stdout]
+rtspAddress: :8554
+hlsAddress: :8888
+
+paths:
+  test:
+    # Loop the test video as an RTSP stream
+    source: /test-media/test.mp4
+    sourceOnDemand: false
+    loop: true

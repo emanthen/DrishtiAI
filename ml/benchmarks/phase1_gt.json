@@ -1,0 +1,17 @@
+{
+  "_comment": "Ground truth for Phase 1 acceptance test. Populate with actual values once test.mp4 is sourced.",
+  "video": "phase1.mp4",
+  "duration_s": 60,
+  "expected_plates": [
+    {
+      "text": "EXAMPLE1",
+      "appears_at_s": 5.0,
+      "disappears_at_s": 8.0,
+      "format": "embossed"
+    }
+  ],
+  "acceptance_criteria": {
+    "min_recall": 0.90,
+    "max_latency_s": 2.0
+  }
+}

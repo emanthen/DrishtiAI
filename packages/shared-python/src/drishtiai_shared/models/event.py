@@ -50,6 +50,6 @@ class Event(Base):
     __table_args__ = (
         Index("ix_events_site_kind_ts", "site_id", "kind", "ts"),
         Index("ix_events_ts", "ts"),
-        # Partition by ts monthly — handled in Alembic migration, not here
-        {"postgresql_partition_by": "RANGE (ts)"},
+        # Partitioning is declared in Alembic migration 0001, not via SQLAlchemy metadata.
+        # SA does not support PARTITION BY in __table_args__ without reflect=True.
     )
