@@ -1,0 +1,23 @@
+# Normalize line endings to LF on all platforms
+* text=auto eol=lf
+
+# Binary files — no line-ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp4 binary
+*.avi binary
+*.pt binary
+*.pth binary
+*.onnx binary
+*.pdparams binary
+*.nb binary
+*.pdf binary
+
+# Force LF for shell scripts and Makefiles
+*.sh text eol=lf
+Makefile text eol=lf
+*.mk text eol=lf

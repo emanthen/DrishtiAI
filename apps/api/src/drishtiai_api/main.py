@@ -1,0 +1,41 @@
+import time
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .config import settings
+from .routers import auth, cameras, events, health, system
+
+app = FastAPI(
+    title=settings.app_name,
+    version="0.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health.router, tags=["health"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(cameras.router, prefix="/cameras", tags=["cameras"])
+app.include_router(events.router, prefix="/events", tags=["events"])
+app.include_router(system.router, prefix="/system", tags=["system"])
+
+
+@app.middleware("http")
+async def add_request_id(request, call_next):
+    import uuid
+    request_id = str(uuid.uuid4())
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = f"{duration_ms:.1f}"
+    return response

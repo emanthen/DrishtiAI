@@ -1,0 +1,5 @@
+packages:
+  - 'apps/web'
+  - 'apps/mobile'
+  - 'packages/shared-ts'
+  - 'packages/ui'

@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+*.so
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.next/
+.turbo/
+dist/
+out/
+*.tsbuildinfo
+.expo/
+android/
+ios/
+
+# uv
+.uv/
+uv.lock
+
+# Docker
+*.log
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# ML artifacts — weights go in DVC / object storage, not git
+ml/**/*.pt
+ml/**/*.pth
+ml/**/*.onnx
+ml/**/*.pdparams
+ml/**/*.nb
+ml/*/data/
+ml/*/corrections/
+
+# MinIO local data
+deploy/compose/minio-data/
+
+# Grafana / Prometheus local state
+deploy/compose/grafana-data/
+deploy/compose/prometheus-data/

@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "DrishtiAI",
+    "slug": "drishtiai",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0F14"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.drishtiai.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0F14"
+      },
+      "package": "com.drishtiai.app",
+      "googleServicesFile": "./google-services.json"
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-notifications", { "icon": "./assets/notification-icon.png" }]
+    ],
+    "scheme": "drishtiai",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

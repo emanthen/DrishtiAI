@@ -1,0 +1,96 @@
+name: License check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Weekly on Mondays — catches newly flagged deps
+    - cron: "0 9 * * 1"
+
+jobs:
+  python-licenses:
+    name: Python dependency licenses
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies + pip-licenses
+        run: |
+          uv sync --all-packages
+          uv pip install pip-licenses
+
+      - name: Check for AGPL/GPL in prod dependencies
+        run: |
+          uv run pip-licenses --format=json --output-file=/tmp/licenses.json
+          python3 - <<'EOF'
+          import json, sys
+          BLOCKED = {"GNU General Public License v2 (GPLv2)", "GNU General Public License v3 (GPLv3)",
+                     "GNU Affero General Public License v3 (AGPLv3)", "AGPL-3.0", "GPL-2.0", "GPL-3.0"}
+          licenses = json.load(open("/tmp/licenses.json"))
+          failures = [p for p in licenses if p.get("License") in BLOCKED]
+          if failures:
+              for f in failures:
+                  print(f"FAIL: {f['Name']} {f['Version']} — {f['License']}", file=sys.stderr)
+              sys.exit(1)
+          print(f"OK: {len(licenses)} Python packages checked, none AGPL/GPL.")
+          EOF
+
+      - name: Generate LICENSES.md artifact
+        run: uv run pip-licenses --format=markdown --output-file=LICENSES-python.md
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-licenses
+          path: LICENSES-python.md
+
+  js-licenses:
+    name: JS dependency licenses
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install license-checker
+        run: pnpm add -g license-checker
+
+      - name: Check for AGPL/GPL in prod JS dependencies
+        run: |
+          license-checker --production --excludePrivatePackages \
+            --failOn "GPL;AGPL" \
+            --json --out /tmp/js-licenses.json || {
+              echo "FAIL: AGPL or GPL dependency detected in JS production dependencies."
+              cat /tmp/js-licenses.json | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          for k,v in d.items():
+              lic = v.get('licenses','')
+              if 'GPL' in lic or 'AGPL' in lic:
+                  print(f'  {k}: {lic}')
+          "
+              exit 1
+            }
+          echo "OK: No AGPL/GPL in JS production dependencies."

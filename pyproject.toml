@@ -1,0 +1,34 @@
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "apps/admin",
+    "apps/worker",
+    "apps/pipeline",
+    "packages/shared-python",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps", "packages"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "PT", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*.py" = ["E501", "N806"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+exclude = ["migrations/", "alembic/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["apps", "packages"]
+python_files = ["test_*.py", "*_test.py"]
+
+[tool.coverage.run]
+omit = ["*/migrations/*", "*/alembic/*", "*/tests/*"]

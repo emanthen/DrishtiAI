@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-ink: 11 15 20;
+    --color-bone: 245 245 241;
+    --color-signal: 44 110 251;
+    --color-alert: 225 76 58;
+    --color-confirm: 31 138 92;
+    --color-steel: 91 100 112;
+    --color-hairline: 225 225 218;
+    --color-hairline-dark: 37 42 49;
+
+    --font-mono: "IBM Plex Mono", "Courier New", monospace;
+    --font-sans: var(--font-inter), system-ui, sans-serif;
+
+    --radius-card: 12px;
+    --radius-control: 8px;
+    --radius-input: 4px;
+  }
+
+  * {
+    @apply border-hairline;
+  }
+
+  html {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Plate display monospace style */
+  .plate-text {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
