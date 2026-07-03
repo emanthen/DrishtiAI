@@ -9,6 +9,31 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-03
+
+### Added — Phase 4: Gate controller integration
+
+**Models** (`drishtiai_shared.models.gate`)
+- `GateController` — site-scoped controller record: `kind` (webhook | onvif), `config` JSONB, `open_pulse_ms`
+- `GateRule` — links a camera to a controller with a trigger condition (`any_plate` | `watchlist_match` | `permit_valid`) and optional `watchlist_id`; priority ordering
+- `GateTriggerLog` — immutable audit trail of every trigger attempt (rule, event, plate, success, error)
+- Alembic migration `0002_gate_controller.py`: `gate_controllers`, `gate_rules`, `gate_trigger_logs`
+
+**Pipeline** (`gate.py`)
+- `evaluate_and_trigger`: loads enabled rules for the camera, checks condition (any plate / watchlist entry match with exact+prefix+fuzzy / valid VisitorPass), fires all matching controllers in priority order, writes trigger log row; gate failure never stops the pipeline
+- `_WebhookDriver`: stdlib `urllib.request` POST with optional `X-Gate-Secret` header; works with ESP32 relay boards, Hikvision HTTP API, any HTTP-capable controller
+- `_OnvifDriver`: raw SOAP `SetRelayOutputState` with WS-Security UsernameToken (SHA-1 password digest); no extra deps; compatible with HikVision DS-2CD/DS-K, Dahua IPC, Axis P-series
+- `main.py`: calls `gate.evaluate_and_trigger` after parking session logic
+
+**API** (prefix `/gates`)
+- `GET/POST/PATCH/DELETE /gates/controllers` — controller CRUD (site_admin+)
+- `POST /gates/controllers/{id}/trigger` — manual open, returns trigger log entry
+- `GET /gates/controllers/{id}/log` — recent 50 trigger log entries
+- `GET/POST/PATCH/DELETE /gates/rules` — rule CRUD with camera/controller filters
+
+**Web dashboard**
+- `/gates` — two-panel layout: controller list (left) + rules table + recent activity log (right); "Open gate" manual trigger button with loading state; enable/disable rules in-place; real-time activity log with success/failure indicator
+
 ## [0.3.0] — 2026-07-03
 
 ### Added — Phase 3: Parking session tracking

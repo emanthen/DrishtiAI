@@ -111,6 +111,36 @@ export const api = {
       }),
   },
 
+  gates: {
+    listControllers: (token: string, siteId?: string) =>
+      request<GateController[]>(
+        `/gates/controllers${siteId ? `?site_id=${siteId}` : ""}`,
+        { token },
+      ),
+    createController: (token: string, body: GateControllerCreate) =>
+      request<GateController>("/gates/controllers", { method: "POST", body: JSON.stringify(body), token }),
+    patchController: (token: string, id: string, body: Partial<GateControllerCreate> & { enabled?: boolean }) =>
+      request<GateController>(`/gates/controllers/${id}`, { method: "PATCH", body: JSON.stringify(body), token }),
+    deleteController: (token: string, id: string) =>
+      request<void>(`/gates/controllers/${id}`, { method: "DELETE", token }),
+    trigger: (token: string, id: string) =>
+      request<GateTriggerLog>(`/gates/controllers/${id}/trigger`, { method: "POST", body: "{}", token }),
+    controllerLog: (token: string, id: string, limit = 50) =>
+      request<GateTriggerLog[]>(`/gates/controllers/${id}/log?limit=${limit}`, { token }),
+    listRules: (token: string, params: { cameraId?: string; controllerId?: string } = {}) => {
+      const q = new URLSearchParams();
+      if (params.cameraId) q.set("camera_id", params.cameraId);
+      if (params.controllerId) q.set("controller_id", params.controllerId);
+      return request<GateRule[]>(`/gates/rules?${q}`, { token });
+    },
+    createRule: (token: string, body: GateRuleCreate) =>
+      request<GateRule>("/gates/rules", { method: "POST", body: JSON.stringify(body), token }),
+    patchRule: (token: string, id: string, body: Partial<GateRuleCreate> & { enabled?: boolean }) =>
+      request<GateRule>(`/gates/rules/${id}`, { method: "PATCH", body: JSON.stringify(body), token }),
+    deleteRule: (token: string, id: string) =>
+      request<void>(`/gates/rules/${id}`, { method: "DELETE", token }),
+  },
+
   parking: {
     listActive: (token: string, siteId?: string) =>
       request<ParkingSession[]>(
@@ -312,6 +342,58 @@ export interface AlertsParams {
   status?: AlertStatus;
   limit?: number;
   cursor?: string;
+}
+
+export type GateKind = "webhook" | "onvif";
+export type GateTriggerCondition = "any_plate" | "watchlist_match" | "permit_valid";
+
+export interface GateController {
+  id: string;
+  site_id: string;
+  name: string;
+  kind: GateKind;
+  config: Record<string, unknown>;
+  open_pulse_ms: number;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface GateControllerCreate {
+  site_id: string;
+  name: string;
+  kind?: GateKind;
+  config?: Record<string, unknown>;
+  open_pulse_ms?: number;
+}
+
+export interface GateRule {
+  id: string;
+  camera_id: string;
+  gate_controller_id: string;
+  trigger_on: GateTriggerCondition;
+  watchlist_id: string | null;
+  priority: number;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface GateRuleCreate {
+  camera_id: string;
+  gate_controller_id: string;
+  trigger_on?: GateTriggerCondition;
+  watchlist_id?: string;
+  priority?: number;
+}
+
+export interface GateTriggerLog {
+  id: string;
+  gate_rule_id: string | null;
+  gate_controller_id: string;
+  event_id: string | null;
+  plate_text: string | null;
+  triggered_at: string;
+  success: boolean;
+  error_msg: string | null;
 }
 
 export type PaymentStatus = "pending" | "paid" | "waived" | "failed";
