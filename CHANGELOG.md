@@ -9,6 +9,36 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-07-04
+
+### Added — Complete stack: worker tasks, observability, retention
+
+**Worker tasks**
+- `tasks/export.py` — `export_events_csv` / `export_parking_csv`: generate large CSV exports asynchronously, upload to MinIO `exports` bucket, return 24-hour presigned URL; handles up to 200 k / 100 k rows respectively
+- `tasks/reports.py` — `generate_daily_report` / `generate_monthly_report`: full reportlab PDF (Traffic, Parking, Alerts, Top Plates, Hourly) generated in the Celery worker; stored under `reports/{site_id}/{date}/` in MinIO with 7-day presigned URL; eliminates potential API timeout on large PDF builds
+- `tasks/retention.py` — `enforce_retention_policy(site_id)`: reads `retention_policies` table per site, hard-deletes expired `plate_read` events from Postgres, purges aged snapshots and clips from MinIO by object last-modified date; falls back to built-in defaults (plate events 90 d, snapshots 30 d, clips 14 d) when no policy row exists
+- Added `reportlab>=4.2.0` to `apps/worker/pyproject.toml`
+
+**API observability**
+- `GET /metrics` — Prometheus exposition endpoint via `prometheus-fastapi-instrumentator` (MIT); exposes `http_requests_total`, `http_request_duration_seconds` histogram, and default process metrics; mounted without auth so Prometheus can scrape without a token
+- Added `prometheus-fastapi-instrumentator>=7.0.0` to `apps/api/pyproject.toml`
+
+**Docker Compose**
+- `postgres-exporter` service (prometheuscommunity/postgres-exporter) added to `observability` profile; scrapes `DATA_SOURCE_NAME` from env; exposes `:9187`
+- `redis-exporter` service (oliver006/redis_exporter) added to `observability` profile; scrapes `REDIS_ADDR`; exposes `:9121`
+- Phase 11 OCR env vars added to `pipeline` service: `PIPELINE_OCR_USE_GPU`, `PIPELINE_OCR_TWO_STAGE`, `PIPELINE_OCR_PREPROCESS`
+
+**Grafana dashboard**
+- `deploy/compose/grafana/provisioning/dashboards/dashboards.yml` — file-provider config pointing at `/etc/grafana/provisioning/dashboards`
+- `deploy/compose/grafana/provisioning/dashboards/drishtiai_ops.json` — `DrishtiAI Ops` dashboard (uid: `drishtiai-ops-v1`): API request rate, P95 latency, 5xx error rate, plate reads/min stat, Postgres connection count, Redis memory usage; auto-refreshes every 30 s; timezone set to `Asia/Kathmandu`
+
+**Makefile**
+- `benchmark-11` target: runs `ml/benchmarks/eval_phase11.py` against local Postgres (recall + precision + CER evaluation)
+
+**Other**
+- `deploy/backups/.gitkeep` — tracks the backup output directory in git so `make backup` has a destination
+- `.env.example` — Phase 11 OCR vars documented with comments
+
 ## [0.11.0] — 2026-07-04
 
 ### Added — Phase 11: OCR pipeline improvements

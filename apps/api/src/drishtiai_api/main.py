@@ -3,6 +3,7 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from .config import settings
 from .routers import analytics, auth, cameras, events, gates, health, notifications, parking, reports, sites, system, tariffs, users, visitor_passes, watchlists, alerts, ws
@@ -42,6 +43,8 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(stream.router, prefix="/stream", tags=["stream"])
 app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(ws.router, prefix="/ws", tags=["websocket"])
+
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 
 @app.middleware("http")

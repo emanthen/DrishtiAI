@@ -9,6 +9,7 @@ dependencies = [
     "sqlalchemy>=2.0.31",
     "psycopg[binary]>=3.2.1",
     "minio>=7.2.8",
+    "reportlab>=4.2.0",
     "drishtiai-shared",
 ]
 

@@ -177,6 +177,9 @@ services:
       PIPELINE_VOTER_EXIT_GAP_S: ${PIPELINE_VOTER_EXIT_GAP_S:-1.5}
       PIPELINE_VOTER_MIN_READS: ${PIPELINE_VOTER_MIN_READS:-2}
       PIPELINE_CAPTURE_BACKEND: ${PIPELINE_CAPTURE_BACKEND:-gstreamer}
+      PIPELINE_OCR_USE_GPU: ${PIPELINE_OCR_USE_GPU:-false}
+      PIPELINE_OCR_TWO_STAGE: ${PIPELINE_OCR_TWO_STAGE:-true}
+      PIPELINE_OCR_PREPROCESS: ${PIPELINE_OCR_PREPROCESS:-true}
     # Phase 1+: add GPU access
     # deploy:
     #   resources:
@@ -287,6 +290,30 @@ services:
       - loki-data:/loki
     ports:
       - "127.0.0.1:3100:3100"
+    profiles: ["observability"]
+    logging: *default-logging
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-drishtiai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-drishtiai}?sslmode=disable
+    expose:
+      - "9187"
+    profiles: ["observability"]
+    logging: *default-logging
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    expose:
+      - "9121"
     profiles: ["observability"]
     logging: *default-logging
 

@@ -89,3 +89,8 @@ benchmark: ## Evaluate Phase 1 recall against running stack (run after 'make dev
 	uv run python ml/benchmarks/eval_phase1.py \
 		--gt ml/benchmarks/phase1_gt.json \
 		--db postgresql://drishtiai:drishtiai@localhost:5432/drishtiai
+
+benchmark-11: ## Evaluate Phase 11 OCR quality (recall, precision, CER) against running stack
+	uv run python ml/benchmarks/eval_phase11.py \
+		--gt ml/benchmarks/phase1_gt.json \
+		--db postgresql://drishtiai:drishtiai@localhost:5432/drishtiai
