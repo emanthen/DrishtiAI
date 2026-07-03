@@ -38,6 +38,11 @@ class PipelineSettings(BaseSettings):
     # Capture backend: "gstreamer" (default, falls back to opencv) or "opencv"
     pipeline_capture_backend: str = "gstreamer"
 
+    # OCR tuning
+    pipeline_ocr_use_gpu: bool = False      # set True on CUDA hosts
+    pipeline_ocr_two_stage: bool = True     # OpenCV candidate detection before full OCR
+    pipeline_ocr_preprocess: bool = True    # CLAHE + unsharp-mask on crops
+
     log_level: str = "INFO"
 
     @field_validator("pipeline_camera_ids")

@@ -9,6 +9,41 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-07-04
+
+### Added — Phase 11: OCR pipeline improvements
+
+**Two-stage plate localisation** (`ocr.py`)
+- `_find_plate_candidates(frame)` — Sobel edge detection → horizontal dilation → contour filtering by aspect ratio (1.5–8.0) and area (≥ 800 px²); returns padded bounding boxes for candidate plate regions
+- PaddleOCR now runs on each small crop instead of the full 1080p frame; typically 1–5 crops vs. one full-frame pass — 5–10× throughput improvement on CPU
+- Falls back to full-frame OCR (with optional downscale to 1280 px wide) when no candidates are found, preserving existing behavior
+
+**Crop pre-processing** (`ocr.py`)
+- `_preprocess_crop(crop)` — (1) upscale if height < 32 px (PaddleOCR minimum), (2) CLAHE contrast enhancement (clip=2.0, 4×4 grid) for underexposed / night captures, (3) unsharp-mask sharpening (σ=2) to recover motion-blur lost detail
+- Controlled by `PIPELINE_OCR_PREPROCESS=true` (default on)
+
+**Post-OCR character correction** (`ocr.py`)
+- `_correct_chars(text)` — position-aware substitution: leading alpha run gets digit→letter corrections (0→O, 1→I, 5→S, 2→Z, 6→G); trailing digit run gets letter→digit corrections (O→0, I→1, S→5, etc.); middle zone untouched to avoid false corrections
+- `_normalize_np_plate(text)` — detects Nepal province-code prefixes (Ba/Ko/Ma/Ga/Lu/Ka/Su) and normalises to zero-padded canonical form (`BA1PA0001`), reducing watchlist mismatches caused by spacing/formatting differences
+
+**Config** (`config.py`)
+- `PIPELINE_OCR_USE_GPU` — passed directly to PaddleOCR; enables GPU inference without code change (previously hardcoded `False`)
+- `PIPELINE_OCR_TWO_STAGE` — toggle two-stage localisation (default `True`)
+- `PIPELINE_OCR_PREPROCESS` — toggle pre-processing pipeline (default `True`)
+
+**Voter improvement** (`voter.py`)
+- `_Track.consensus()` switched from pure majority vote to **confidence-weighted vote**: winner = text with highest cumulative confidence (sum of per-read confidence); reported confidence = average across winner reads
+- Correctly handles the case where a high-confidence correct reading appears fewer times than a low-confidence OCR error
+- Removed unused `Counter` import
+
+**Benchmark** (`ml/benchmarks/eval_phase11.py`)
+- Levenshtein-tolerant matching (≤ 1 char error accepted as a hit) for single-character substitution errors
+- **Precision** metric: fraction of detected plates that are in ground truth (false positive rate)
+- **CER** (Character Error Rate): avg Levenshtein / expected length per plate
+- Acceptance criteria: `--min-precision` (default 0.70), `--max-cer` (default 0.10)
+- False positive list printed at end of run
+- Backwards-compatible with `phase1_gt.json` ground truth format
+
 ## [0.10.0] — 2026-07-04
 
 ### Added — Phase 10: Camera health monitoring

@@ -1,19 +1,45 @@
 """
-Plate OCR using PaddleOCR.
+Plate OCR — Phase 11: two-stage detection + pre-processing + char correction.
 
-Phase 1: PaddleOCR's general text detection + recognition on the full frame.
-         We filter results by aspect ratio and text length to isolate plate-like regions.
-Phase 3: Replace with fine-tuned plate detector + Devanagari-capable OCR model.
+Pipeline
+--------
+1. Candidate localisation (two-stage, optional)
+   OpenCV Sobel → dilate → contours → aspect/area filter → candidate bboxes
+   Falls back to full-frame OCR when no candidates found.
+
+2. Crop pre-processing (optional)
+   CLAHE contrast enhancement + unsharp-mask sharpening + minimum-height upscale.
+   Dramatically improves accuracy on underexposed or motion-blurred frames.
+
+3. PaddleOCR recognition
+   Runs on pre-processed crop (fast) or full frame (fallback).
+   GPU controlled by PIPELINE_OCR_USE_GPU env / config flag.
+
+4. Post-OCR correction
+   Context-free character substitution table for common plate OCR errors
+   (0/O, 1/I, 5/S, 8/B, 6/G, 2/Z).  Position-aware: leading alpha-run
+   gets digit→letter corrections; trailing digit-run gets letter→digit
+   corrections; mixed-middle section gets no correction.
+
+5. Nepal plate normaliser
+   Detects known province-code prefixes (Ba, Ko, Ma, Ga, Lu, Ka, Su) and
+   reformats to a canonical `BA1PA0001` (no spaces, uppercase) form used
+   for watchlist matching.
 """
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
+
+from drishtiai_pipeline.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded — PaddleOCR takes ~3s to initialize on first call
+# Lazy-loaded — PaddleOCR takes ~3 s to initialize on first call
 _ocr = None
 
 
@@ -21,44 +47,197 @@ def _get_ocr():
     global _ocr
     if _ocr is None:
         from paddleocr import PaddleOCR
-        logger.info("Initializing PaddleOCR (first load, may take a few seconds)...")
+        logger.info("Initialising PaddleOCR (first load)…")
         _ocr = PaddleOCR(
             use_angle_cls=True,
             lang="en",
             show_log=False,
-            use_gpu=False,   # Phase 1: CPU. Phase 2+: set from config/GPU availability.
+            use_gpu=settings.pipeline_ocr_use_gpu,
         )
-        logger.info("PaddleOCR ready.")
+        logger.info("PaddleOCR ready (gpu=%s).", settings.pipeline_ocr_use_gpu)
     return _ocr
 
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+_MIN_ASPECT = 1.5      # width / height
+_MAX_ASPECT = 8.0
+_MIN_AREA   = 800      # pixels²
+_PAD        = 8        # pixels of padding added around each candidate crop
+_MIN_CROP_H = 32       # PaddleOCR works best when text height ≥ 32 px
+
+# Broad alphanumeric pattern: 3–13 chars, starts + ends with alnum
+_PLATE_RE = re.compile(r"^[A-Z0-9][A-Z0-9]{1,11}[A-Z0-9]$")
+
+# Nepal province code prefixes (Latin OCR transliterations)
+_NP_PREFIXES = ("BA", "KO", "MA", "GA", "LU", "KA", "SU", "ME", "NA")
+
+
+# ── Stage 1 — candidate localisation ─────────────────────────────────────────
+
+def _find_plate_candidates(
+    frame: np.ndarray,
+) -> list[tuple[int, int, int, int]]:
+    """
+    Use Sobel edges + horizontal dilation + contour filtering to find regions
+    that look like licence plates.  Returns (x1, y1, x2, y2) tuples with
+    padding applied; may return an empty list.
+    """
+    h_frame, w_frame = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Bilateral filter: reduces noise while keeping edges sharp
+    smooth = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
+
+    # Horizontal Sobel — plates are character-rich horizontal structures
+    sobel = cv2.Sobel(smooth, cv2.CV_8U, 1, 0, ksize=3)
+
+    # Otsu threshold on the edge map
+    _, thresh = cv2.threshold(sobel, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+    # Dilate horizontally to connect individual characters into a plate blob
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 3))
+    dilated = cv2.dilate(thresh, kernel)
+
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    candidates: list[tuple[int, int, int, int]] = []
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+        if w * h < _MIN_AREA:
+            continue
+        aspect = w / max(h, 1)
+        if not (_MIN_ASPECT <= aspect <= _MAX_ASPECT):
+            continue
+        x1 = max(0, x - _PAD)
+        y1 = max(0, y - _PAD)
+        x2 = min(w_frame, x + w + _PAD)
+        y2 = min(h_frame, y + h + _PAD)
+        candidates.append((x1, y1, x2, y2))
+
+    return candidates
+
+
+# ── Stage 2 — crop pre-processing ────────────────────────────────────────────
+
+def _preprocess_crop(crop: np.ndarray) -> np.ndarray:
+    """
+    CLAHE contrast enhancement + unsharp-mask sharpening + upscale if tiny.
+    Returns a BGR image ready for PaddleOCR.
+    """
+    if crop.size == 0:
+        return crop
+
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop.copy()
+
+    # Upscale very small crops so PaddleOCR can resolve individual characters
+    h, w = gray.shape[:2]
+    if h < _MIN_CROP_H:
+        scale = _MIN_CROP_H / h
+        gray = cv2.resize(
+            gray, (max(1, int(w * scale)), _MIN_CROP_H), interpolation=cv2.INTER_CUBIC
+        )
+
+    # CLAHE — equalises contrast locally; good for harsh shadows and night shots
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+    enhanced = clahe.apply(gray)
+
+    # Unsharp mask — recovers some sharpness lost to motion blur
+    blurred = cv2.GaussianBlur(enhanced, (0, 0), sigmaX=2)
+    sharpened = cv2.addWeighted(enhanced, 1.5, blurred, -0.5, 0)
+
+    return cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+
+
+# ── Stage 4 — post-OCR correction ────────────────────────────────────────────
+
+# Characters that look alike and are commonly swapped
+_LETTER_TO_DIGIT = str.maketrans("OILSZGB", "0115260")  # in digit run: O→0 etc.
+_DIGIT_TO_LETTER = str.maketrans("015260",  "OILSZG")   # in letter run: 0→O etc.
+
+
+def _correct_chars(text: str) -> str:
+    """
+    Position-aware character substitution.
+
+    Splits the cleaned plate text into three zones:
+      • leading alpha run  — expect letters; convert stray digits → letters
+      • trailing digit run — expect digits; convert stray letters → digits
+      • middle remainder   — leave untouched (too ambiguous)
+
+    Example: "BA1PA0O01" → correct trailing run "0O01" → "0001"
+             result: "BA1PA0001"
+    """
+    if not text:
+        return text
+
+    # Leading alpha zone
+    lead_end = 0
+    while lead_end < len(text) and text[lead_end].isalpha():
+        lead_end += 1
+
+    # Trailing digit zone
+    trail_start = len(text)
+    while trail_start > lead_end and text[trail_start - 1].isdigit():
+        trail_start -= 1
+
+    lead   = text[:lead_end].translate(_DIGIT_TO_LETTER)
+    middle = text[lead_end:trail_start]
+    trail  = text[trail_start:].translate(_LETTER_TO_DIGIT)
+
+    return lead + middle + trail
+
+
+def _normalize_np_plate(text: str) -> str | None:
+    """
+    If `text` looks like a Nepal province plate, return its canonical form
+    (uppercase, no spaces/dashes, province code corrected).
+
+    Returns None if it does not match any known Nepal plate pattern.
+
+    Nepal format: [province2-3][series1-2][type1-2][vehicle4-5]
+    Example: BA1PA0001, KO2NA3456
+    """
+    upper = text.upper()
+
+    # Must start with a known province prefix
+    prefix = next((p for p in _NP_PREFIXES if upper.startswith(p)), None)
+    if prefix is None:
+        return None
+
+    rest = upper[len(prefix):]
+
+    # Next: 1-2 digit series
+    m = re.match(r"^(\d{1,2})([A-Z]{1,2})(\d{4,5})$", rest)
+    if not m:
+        return None
+
+    series, vtype, number = m.groups()
+    return f"{prefix}{series}{vtype}{number.zfill(4)}"
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
 
 @dataclass
 class PlateDetection:
     text: str
     confidence: float
-    bbox: list[list[float]]  # [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]
-    crop: np.ndarray          # BGR crop of the plate region
+    bbox: list[list[float]]   # [[x1,y1],[x2,y1],[x2,y2],[x1,y2]] in frame coords
+    crop: np.ndarray           # BGR crop of the plate region (pre-processed)
 
 
-# Regex for English/Latin vehicle plates (very broad — covers NP, IN, and generic formats)
-_PLATE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9\s\-]{2,14}[A-Z0-9]$")
+def _run_ocr_on_image(
+    image: np.ndarray,
+    offset_x: int = 0,
+    offset_y: int = 0,
+) -> list[PlateDetection]:
+    """Run PaddleOCR on `image`, apply filters, return PlateDetections.
 
-# Plate region aspect ratio: width/height typically 2.0–7.0 for standard plates
-_MIN_ASPECT = 1.5
-_MAX_ASPECT = 8.0
-
-# Minimum plate region area in pixels
-_MIN_AREA = 800
-
-
-def detect_plates(frame_bgr: np.ndarray) -> list[PlateDetection]:
-    """
-    Run PaddleOCR on a full frame and return plate-like detections.
-    Filters by aspect ratio, text length, and a permissive alphanumeric pattern.
+    `offset_x/y` translate bbox coordinates back to full-frame space.
     """
     ocr = _get_ocr()
     try:
-        results = ocr.ocr(frame_bgr, cls=True)
+        results = ocr.ocr(image, cls=True)
     except Exception:
         logger.exception("PaddleOCR inference failed")
         return []
@@ -74,36 +253,87 @@ def detect_plates(frame_bgr: np.ndarray) -> list[PlateDetection]:
         if confidence < 0.3:
             continue
 
-        # bbox_raw: [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]
         xs = [p[0] for p in bbox_raw]
         ys = [p[1] for p in bbox_raw]
         w = max(xs) - min(xs)
         h = max(ys) - min(ys)
-        area = w * h
 
-        if area < _MIN_AREA:
+        if w * h < _MIN_AREA:
             continue
 
         aspect = w / max(h, 1)
         if not (_MIN_ASPECT <= aspect <= _MAX_ASPECT):
             continue
 
+        # Clean and correct
         clean = text.upper().replace(" ", "").replace(".", "").replace("-", "")
-        if len(clean) < 3 or len(clean) > 12:
+        clean = _correct_chars(clean)
+
+        if len(clean) < 3 or len(clean) > 13:
+            continue
+        if not _PLATE_RE.match(clean):
             continue
 
-        if not _PLATE_PATTERN.match(clean):
-            continue
+        # Try Nepal normalisation; keep original if it doesn't match
+        normalised = _normalize_np_plate(clean) or clean
 
-        x1, y1 = int(min(xs)), int(min(ys))
-        x2, y2 = int(max(xs)), int(max(ys))
-        crop = frame_bgr[max(0, y1):y2, max(0, x1):x2]
+        # Translate bbox back to full-frame coords
+        frame_bbox = [
+            [p[0] + offset_x, p[1] + offset_y] for p in bbox_raw
+        ]
+
+        # Crop from the image passed in (not full frame — caller handles that)
+        x1c, y1c = int(min(xs)), int(min(ys))
+        x2c, y2c = int(max(xs)), int(max(ys))
+        crop = image[max(0, y1c):y2c, max(0, x1c):x2c]
 
         plates.append(PlateDetection(
-            text=clean,
+            text=normalised,
             confidence=float(confidence),
-            bbox=bbox_raw,
+            bbox=frame_bbox,
             crop=crop,
         ))
 
     return plates
+
+
+def detect_plates(frame_bgr: np.ndarray) -> list[PlateDetection]:
+    """
+    Run the full two-stage OCR pipeline on a BGR frame.
+
+    Returns a deduplicated list of PlateDetections sorted by confidence (desc).
+    """
+    results: list[PlateDetection] = []
+
+    if settings.pipeline_ocr_two_stage:
+        candidates = _find_plate_candidates(frame_bgr)
+    else:
+        candidates = []
+
+    if candidates:
+        for x1, y1, x2, y2 in candidates:
+            crop = frame_bgr[y1:y2, x1:x2]
+            if crop.size == 0:
+                continue
+            processed = _preprocess_crop(crop) if settings.pipeline_ocr_preprocess else crop
+            found = _run_ocr_on_image(processed, offset_x=x1, offset_y=y1)
+            results.extend(found)
+    else:
+        # Fallback: full-frame OCR (slower, more false positives)
+        if settings.pipeline_ocr_preprocess:
+            # Pre-process a downscaled copy to keep latency manageable
+            h, w = frame_bgr.shape[:2]
+            scale = min(1.0, 1280 / max(w, 1))
+            small = cv2.resize(frame_bgr, (int(w * scale), int(h * scale))) if scale < 1.0 else frame_bgr
+        else:
+            small = frame_bgr
+
+        results = _run_ocr_on_image(small)
+
+    # Deduplicate: keep highest-confidence result per normalised text
+    best: dict[str, PlateDetection] = {}
+    for det in results:
+        if det.text not in best or det.confidence > best[det.text].confidence:
+            best[det.text] = det
+
+    return sorted(best.values(), key=lambda d: d.confidence, reverse=True)

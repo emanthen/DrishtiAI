@@ -13,7 +13,6 @@ Thread-safety: one PlateVoter instance per camera thread — no locking needed.
 from __future__ import annotations
 
 import time
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -30,14 +29,33 @@ class _Track:
         self.last_seen = time.monotonic()
 
     def consensus(self) -> PlateDetection:
-        """Return the highest-confidence detection whose text is the majority vote."""
-        text_counts: Counter[str] = Counter(d.text for d in self.reads)
-        winner_text, _ = text_counts.most_common(1)[0]
-        best = max(
-            (d for d in self.reads if d.text == winner_text),
-            key=lambda d: d.confidence,
+        """
+        Confidence-weighted vote: winner = text with highest (count × avg_confidence).
+
+        Pure majority voting fails when a correct high-confidence reading appears
+        fewer times than an incorrect low-confidence reading.  Weighting by
+        cumulative confidence favours quality over quantity.
+        """
+        # Accumulate total confidence and best detection per candidate text
+        weight: dict[str, float] = {}
+        best_det: dict[str, PlateDetection] = {}
+
+        for d in self.reads:
+            weight[d.text] = weight.get(d.text, 0.0) + d.confidence
+            if d.text not in best_det or d.confidence > best_det[d.text].confidence:
+                best_det[d.text] = d
+
+        winner_text = max(weight, key=weight.__getitem__)
+        winner_reads = [d for d in self.reads if d.text == winner_text]
+        avg_conf = weight[winner_text] / len(winner_reads)
+
+        w = best_det[winner_text]
+        return PlateDetection(
+            text=w.text,
+            confidence=round(avg_conf, 4),
+            bbox=w.bbox,
+            crop=w.crop,
         )
-        return best
 
 
 class PlateVoter:
