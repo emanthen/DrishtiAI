@@ -46,6 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <NavItem href="/parking" label="Parking" />
           <NavItem href="/gates" label="Gates" />
           <NavItem href="/visitor-passes" label="Visitor passes" />
+          <NavItem href="/users" label="Users" />
           <NavItem href="/reports" label="Reports" />
         </div>
 

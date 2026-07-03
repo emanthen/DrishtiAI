@@ -9,6 +9,29 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-04
+
+### Added — Phase 9: User management
+
+**API** (`/users`)
+- `GET /users` — list users scoped to caller's org; site_admin/manager see only users sharing at least one site; filterable by `role` and `is_active`
+- `POST /users` — create user; auto-generates a 16-char password when none is provided; returns the plaintext password once (show-and-copy flow); site_admin can only assign roles below themselves (manager / guard / resident / auditor) and only to sites they belong to
+- `GET /users/{id}` — fetch single user
+- `PATCH /users/{id}` — update name, email, phone, role, site_ids, is_active (soft deactivate); same role-hierarchy rules enforced
+- `DELETE /users/{id}` — soft-deactivate (sets `is_active = false`); cannot deactivate yourself
+- `POST /users/{id}/set-password` — admin resets a user's password; auto-generates when body is empty; returns plaintext once
+- Role hierarchy: superadmin > site_admin (can manage manager/guard/resident/auditor) > manager (read-only) 
+- All write operations are scoped to the caller's `org_id`
+
+**Web dashboard**
+- `/users` page: sortable table with name, email, role badge (colour-coded by role), active/inactive badge, created date
+- "+ Add user" form (inline, 2-column grid): name, email, role selector, phone, optional password
+- Post-create banner shows the generated password until dismissed
+- Per-row "Reset pwd" action — shows new auto-generated password in a dismissable banner
+- Per-row "Deactivate / Activate" toggle (cannot deactivate yourself)
+- Role and status filter dropdowns
+- "Users" link added to sidebar (between Visitor passes and Reports)
+
 ## [0.8.0] — 2026-07-04
 
 ### Added — Phase 8: Export & reporting
