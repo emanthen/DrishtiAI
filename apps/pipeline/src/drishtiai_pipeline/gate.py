@@ -175,19 +175,21 @@ def _check_watchlist(
     return False
 
 
-def _check_permit(db: Session, site_id: uuid.UUID, plate_text: str) -> bool:
-    """Return True if plate has an active permit for this site."""
+def _check_permit(
+    db: Session, site_id: uuid.UUID, plate_text: str
+) -> "VisitorPass | None":
+    """Return the active VisitorPass for this plate, or None."""
     now = datetime.now(tz=timezone.utc)
     norm = _normalise(plate_text)
-    pass_ = db.scalars(
+    return db.scalars(
         select(VisitorPass).where(
             VisitorPass.site_id == site_id,
             VisitorPass.plate == norm,
             VisitorPass.valid_from <= now,
             VisitorPass.valid_to >= now,
+            VisitorPass.used == False,  # noqa: E712
         ).limit(1)
     ).first()
-    return pass_ is not None
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -222,13 +224,15 @@ def evaluate_and_trigger(
 
         # Check condition
         matched = False
+        matched_pass = None
         cond = rule.trigger_on
         if cond == GateTriggerCondition.any_plate:
             matched = True
         elif cond == GateTriggerCondition.watchlist_match and rule.watchlist_id:
             matched = _check_watchlist(db, rule.watchlist_id, plate_text)
         elif cond == GateTriggerCondition.permit_valid:
-            matched = _check_permit(db, site_id, plate_text)
+            matched_pass = _check_permit(db, site_id, plate_text)
+            matched = matched_pass is not None
 
         if not matched:
             continue
@@ -250,6 +254,11 @@ def evaluate_and_trigger(
                 "gate: trigger failed controller=%s plate=%s error=%s",
                 controller.name, plate_text, error_msg,
             )
+
+        # Consume single-use visitor pass after a successful trigger
+        if success and matched_pass is not None and matched_pass.single_use:
+            matched_pass.used = True
+            log.info("gate: consumed single-use pass %s for plate=%s", matched_pass.id, plate_text)
 
         entry = GateTriggerLog(
             id=uuid.uuid4(),

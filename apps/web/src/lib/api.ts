@@ -111,6 +111,28 @@ export const api = {
       }),
   },
 
+  visitorPasses: {
+    list: (token: string, params: VisitorPassParams = {}) => {
+      const q = new URLSearchParams();
+      if (params.siteId) q.set("site_id", params.siteId);
+      if (params.status) q.set("status", params.status);
+      if (params.limit) q.set("limit", String(params.limit));
+      if (params.cursor) q.set("cursor", params.cursor);
+      return request<VisitorPassPage>(`/visitor-passes?${q}`, { token });
+    },
+    mine: (token: string, status?: string) =>
+      request<VisitorPass[]>(
+        `/visitor-passes/mine${status ? `?status=${status}` : ""}`,
+        { token },
+      ),
+    create: (token: string, body: VisitorPassCreate) =>
+      request<VisitorPass>("/visitor-passes", { method: "POST", body: JSON.stringify(body), token }),
+    get: (token: string, id: string) =>
+      request<VisitorPass>(`/visitor-passes/${id}`, { token }),
+    cancel: (token: string, id: string) =>
+      request<void>(`/visitor-passes/${id}`, { method: "DELETE", token }),
+  },
+
   gates: {
     listControllers: (token: string, siteId?: string) =>
       request<GateController[]>(
@@ -340,6 +362,42 @@ export interface AlertsPage {
 export interface AlertsParams {
   siteId?: string;
   status?: AlertStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface VisitorPass {
+  id: string;
+  site_id: string;
+  host_user_id: string | null;
+  plate: string;
+  valid_from: string;
+  valid_to: string;
+  single_use: boolean;
+  used: boolean;
+  notes: string | null;
+  created_at: string;
+  pass_status: "active" | "upcoming" | "expired" | "used" | "unknown";
+}
+
+export interface VisitorPassCreate {
+  site_id?: string;
+  plate: string;
+  valid_from: string;
+  valid_to: string;
+  single_use?: boolean;
+  notes?: string;
+}
+
+export interface VisitorPassPage {
+  items: VisitorPass[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface VisitorPassParams {
+  siteId?: string;
+  status?: string;
   limit?: number;
   cursor?: string;
 }

@@ -9,6 +9,23 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-04
+
+### Added — Phase 5: Visitor pass management
+
+**Pipeline**
+- `gate.py`: `_check_permit` now returns the `VisitorPass` object (not just bool); after a successful `permit_valid` trigger, single-use passes are automatically marked `used = true` — prevents the gate re-opening on a second drive-by
+
+**API** (`/visitor-passes`)
+- `GET /visitor-passes` — paginated list with `site_id`, `status` (active/upcoming/expired/used), cursor filter
+- `GET /visitor-passes/mine` — current user's own passes (resident self-service shorthand)
+- `POST /visitor-passes` — create: `plate` (auto-normalised), `valid_from`, `valid_to`, `single_use`, `notes`; `site_id` optional (defaults to user's first site)
+- `GET /visitor-passes/{id}` — single pass with computed `pass_status`
+- `DELETE /visitor-passes/{id}` — cancel (host or site_admin); hard-deletes so gate rule stops matching immediately
+
+**Web dashboard**
+- `/visitor-passes` — status tabs (Active / Upcoming / Expired / Used / All); inline "Add pass" form with plate input, datetime-local pickers pre-filled to now → +24h, single-use toggle, notes; Cancel button per pass; Visitor passes nav link added
+
 ## [0.4.0] — 2026-07-03
 
 ### Added — Phase 4: Gate controller integration
