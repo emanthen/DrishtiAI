@@ -9,6 +9,30 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-04
+
+### Added — Phase 7: Mobile app + push notifications
+
+**Mobile app** (`apps/mobile`) — Expo Router v3 / React Native
+- Login screen with email + password; JWT stored in `expo-secure-store`; auth-guard in root layout redirects unauthenticated users to login
+- Bottom tab bar: Home · Passes · Alerts · Profile
+- **Home** — 3×2 stat cards (events today, open alerts, active parking, revenue, gate triggers, active passes); recent 5 alerts list with plate tag, watchlist name, timestamp, status badge; pull-to-refresh
+- **Visitor Passes** — tabbed by status (active / upcoming / expired / used); inline create form with plate, valid-from/to datetime pickers (pre-filled now → +24 h), single-use toggle, notes; cancel (hard-delete) with immediate gate lockout
+- **Alerts** — tabbed by status (new / ack / snoozed / resolved); acknowledge and resolve actions with optimistic list removal; pull-to-refresh
+- **Profile** — avatar initials, name, email, role badge; sign-out button that revokes JWT and deregisters push token
+- `PlateTag` component — monospace, border-left accent, sm/md sizes
+- `StatCard` component — surface card with coloured top border (default blue / alert red / confirm green)
+- Zustand auth store with async `hydrateAuth` / `persistToken` / `clearToken` helpers for SecureStore
+- Push token registered on tab mount via `expo-notifications`; unregistered on logout
+- Metro monorepo config: `watchFolders` + `nodeModulesPaths` for workspace resolution
+
+**API**
+- `POST /notifications/register` — stores Expo push token in Redis SET `push_tokens:{user_id}`
+- `POST /notifications/unregister` — removes token from the set
+
+**Pipeline**
+- `alert_engine.py`: after committing Alert rows, scans `push_tokens:*` Redis keys and fires Expo Push API (`exp.host`) via stdlib `urllib.request`; pure best-effort (exceptions swallowed, timeout 5 s); no new dependencies
+
 ## [0.6.0] — 2026-07-04
 
 ### Added — Phase 6: Analytics dashboard

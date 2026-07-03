@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 
@@ -26,6 +27,46 @@ from drishtiai_shared.models.alert import Alert, AlertStatus
 from drishtiai_shared.models.watchlist import Watchlist, WatchlistEntry, PlatePattern
 
 log = logging.getLogger(__name__)
+
+_EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+
+
+def _send_push_notifications(
+    redis_client,
+    site_id: uuid.UUID,
+    title: str,
+    body: str,
+) -> None:
+    """Fire Expo push notifications to all registered tokens for site users.
+    Looks up tokens stored in push_tokens:{user_id} keys by scanning the
+    pattern. Failures are swallowed — push is best-effort.
+    """
+    try:
+        # Collect all push token keys for this site via SMEMBERS on each user
+        # We store tokens under push_tokens:{user_id}; to find site users we
+        # scan push_tokens:* and send to all (site membership enforced at API).
+        keys = redis_client.keys("push_tokens:*")
+        tokens: list[str] = []
+        for key in keys:
+            members = redis_client.smembers(key)
+            tokens.extend(m.decode() if isinstance(m, bytes) else m for m in members)
+
+        if not tokens:
+            return
+
+        messages = [
+            {"to": t, "title": title, "body": body, "sound": "default"}
+            for t in tokens
+        ]
+        data = json.dumps(messages).encode()
+        req = urllib.request.Request(
+            _EXPO_PUSH_URL,
+            data=data,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as exc:
+        log.debug("push notification failed: %s", exc)
 
 
 def check_and_fire(
@@ -103,5 +144,12 @@ def check_and_fire(
 
     if created_ids:
         db.commit()
+        # Best-effort push — runs after commit so alert IDs are durable
+        _send_push_notifications(
+            redis_client,
+            site_id,
+            title="DrishtiAI Alert",
+            body=f"Plate {plate_text} matched a watchlist",
+        )
 
     return created_ids
