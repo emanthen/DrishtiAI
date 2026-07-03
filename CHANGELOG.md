@@ -9,6 +9,27 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-07-04
+
+### Added — Phase 8: Export & reporting
+
+**API** (`/reports`)
+- `GET /reports/events.csv` — all events (plate reads, etc.) for a date range; columns: timestamp, kind, plate, camera, confidence, event_id; up to 50 000 rows
+- `GET /reports/parking.csv` — parking sessions for a date range; columns: entry_time, exit_time, plate, duration_s, amount_NPR, payment_status, session_id
+- `GET /reports/alerts.csv` — alerts for a date range; columns: timestamp, plate, watchlist, category, status, ack_at, notes, alert_id
+- `GET /reports/daily-summary.pdf` — A4 PDF with five sections (Traffic overview · Parking · Alerts by status · Top 10 plates · Hourly traffic bar); built with `reportlab` (BSD licensed); lazy-imported so it doesn't slow server startup
+- All endpoints accept `site_id`, `from`, `to` query params; default range is last 7 days; all queries are time-bounded to hit the partition index
+- File download via `StreamingResponse` with `Content-Disposition: attachment`
+
+**Web dashboard**
+- `/reports` page with date-range pickers (from / to), three CSV download buttons, and a separate date picker for the PDF summary
+- Downloads via `fetch` + `Blob` URL so the Bearer token is included (no token-in-URL exposure)
+- "Reports" link added as last item in sidebar nav
+- `API_BASE` exported from `lib/api.ts` for use by the download helper
+
+**Dependencies**
+- `reportlab>=4.2.0` added to `apps/api/pyproject.toml` (BSD licensed; lazy-imported only in the PDF route)
+
 ## [0.7.0] — 2026-07-04
 
 ### Added — Phase 7: Mobile app + push notifications

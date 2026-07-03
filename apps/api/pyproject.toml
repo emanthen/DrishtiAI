@@ -17,6 +17,7 @@ dependencies = [
     "celery>=5.4.0",
     "minio>=7.2.8",
     "drishtiai-shared",
+    "reportlab>=4.2.0",
 ]
 
 [project.optional-dependencies]
