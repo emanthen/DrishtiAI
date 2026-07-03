@@ -14,8 +14,11 @@ COPY pyproject.toml /app/pyproject.toml
 
 RUN uv sync --package drishtiai-api --no-dev
 
+COPY apps/api/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 WORKDIR /app/apps/api
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "drishtiai_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/entrypoint.sh"]

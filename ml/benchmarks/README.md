@@ -13,10 +13,21 @@ Reproducible evaluation scripts and results. All results checked into this direc
 ## How to run
 
 ```bash
-# Phase 1 plate read benchmark
-uv run python ml/benchmarks/eval_plate_read.py --video ml/benchmarks/phase1.mp4 --gt ml/benchmarks/phase1_gt.json
+# Generate synthetic Phase 1 test video (run once)
+make generate-test-video
+# or manually:
+uv run python ml/benchmarks/synthetic/generate_test_video.py \
+    --output ml/benchmarks/phase1.mp4 \
+    --gt ml/benchmarks/phase1_gt.json
 
-# Phase 3 OCR accuracy
+# Evaluate Phase 1 recall (run after 'make dev' + pipeline has processed the video)
+make benchmark
+# or manually, with custom video-start timestamp:
+uv run python ml/benchmarks/eval_phase1.py \
+    --gt ml/benchmarks/phase1_gt.json \
+    --video-start 2026-07-03T10:00:00Z
+
+# Phase 3 OCR accuracy (Phase 3)
 uv run python ml/benchmarks/eval_ocr.py --dataset ml/benchmarks/nepali_plates_test/
 ```
 

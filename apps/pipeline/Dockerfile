@@ -6,8 +6,12 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libgomp1 libgl1 libglib2.0-0 libsm6 libxrender1 libxext6 \
+    libglib2.0-0 libgomp1 libgl1 libsm6 libxrender1 libxext6 \
     curl \
+    python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+    gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly gstreamer1.0-rtsp gstreamer1.0-libav \
+    gstreamer1.0-tools libgstreamer1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv

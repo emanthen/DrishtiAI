@@ -39,6 +39,8 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+export { ApiError };
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -79,6 +81,65 @@ export const api = {
       if (params.cursor) q.set("cursor", params.cursor);
       return request<EventsPage>(`/events?${q}`, { token });
     },
+  },
+
+  sites: {
+    list: (token: string) => request<Site[]>("/sites", { token }),
+    create: (token: string, body: SiteCreate) =>
+      request<Site>("/sites", { method: "POST", body: JSON.stringify(body), token }),
+  },
+
+  watchlists: {
+    list: (token: string, siteId?: string) =>
+      request<Watchlist[]>(`/watchlists${siteId ? `?site_id=${siteId}` : ""}`, { token }),
+    create: (token: string, body: WatchlistCreate) =>
+      request<Watchlist>("/watchlists", { method: "POST", body: JSON.stringify(body), token }),
+    delete: (token: string, id: string) =>
+      request<void>(`/watchlists/${id}`, { method: "DELETE", token }),
+    listEntries: (token: string, watchlistId: string) =>
+      request<WatchlistEntry[]>(`/watchlists/${watchlistId}/entries`, { token }),
+    addEntry: (token: string, watchlistId: string, body: EntryCreate) =>
+      request<WatchlistEntry>(`/watchlists/${watchlistId}/entries`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+    removeEntry: (token: string, watchlistId: string, entryId: string) =>
+      request<void>(`/watchlists/${watchlistId}/entries/${entryId}`, {
+        method: "DELETE",
+        token,
+      }),
+  },
+
+  alerts: {
+    list: (token: string, params: AlertsParams = {}) => {
+      const q = new URLSearchParams();
+      if (params.siteId) q.set("site_id", params.siteId);
+      if (params.status) q.set("status", params.status);
+      if (params.limit) q.set("limit", String(params.limit));
+      if (params.cursor) q.set("cursor", params.cursor);
+      return request<AlertsPage>(`/alerts?${q}`, { token });
+    },
+    counts: (token: string, siteId?: string) =>
+      request<AlertCounts>(`/alerts/counts${siteId ? `?site_id=${siteId}` : ""}`, { token }),
+    ack: (token: string, id: string, notes?: string) =>
+      request<Alert>(`/alerts/${id}/ack`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+        token,
+      }),
+    snooze: (token: string, id: string, snoozeUntil: string, notes?: string) =>
+      request<Alert>(`/alerts/${id}/snooze`, {
+        method: "POST",
+        body: JSON.stringify({ snooze_until: snoozeUntil, notes }),
+        token,
+      }),
+    resolve: (token: string, id: string, notes?: string) =>
+      request<Alert>(`/alerts/${id}/resolve`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+        token,
+      }),
   },
 };
 
@@ -140,4 +201,89 @@ export interface EventsParams {
   to?: string;
   limit?: number;
   cursor?: string;
+}
+
+export interface Site {
+  id: string;
+  org_id: string;
+  name: string;
+  address: string | null;
+  timezone: string;
+  plate_region: string;
+}
+
+export interface SiteCreate {
+  org_id: string;
+  name: string;
+  address?: string;
+  timezone?: string;
+  plate_region?: string;
+}
+
+export interface Watchlist {
+  id: string;
+  site_id: string;
+  name: string;
+  category: "blocked" | "vip" | "resident" | "vendor" | "staff" | "police_notice";
+  alert_channels: string[];
+}
+
+export interface WatchlistCreate {
+  site_id: string;
+  name: string;
+  category: Watchlist["category"];
+  alert_channels?: string[];
+}
+
+export interface WatchlistEntry {
+  id: string;
+  watchlist_id: string;
+  plate_text: string;
+  plate_pattern: "exact" | "prefix" | "fuzzy";
+  notes: string | null;
+}
+
+export interface EntryCreate {
+  plate_text: string;
+  plate_pattern?: "exact" | "prefix" | "fuzzy";
+  notes?: string;
+}
+
+export type AlertStatus = "new" | "ack" | "snoozed" | "resolved";
+
+export interface Alert {
+  id: string;
+  event_id: string;
+  watchlist_id: string | null;
+  status: AlertStatus;
+  ack_by: string | null;
+  ack_at: string | null;
+  snooze_until: string | null;
+  notes: string | null;
+  created_at: string;
+  plate_text: string | null;
+  camera_id: string | null;
+  site_id: string | null;
+  watchlist_name: string | null;
+}
+
+export interface AlertsPage {
+  items: Alert[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface AlertsParams {
+  siteId?: string;
+  status?: AlertStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface AlertCounts {
+  new: number;
+  ack: number;
+  snoozed: number;
+  resolved: number;
+  total_new: number;
 }

@@ -4,8 +4,20 @@ rtspAddress: :8554
 hlsAddress: :8888
 
 paths:
+  # Primary test stream — used by seed-dev camera
   test:
-    # Loop the test video as an RTSP stream
     source: /test-media/test.mp4
     sourceOnDemand: false
+    loop: true
+
+  # Additional streams for multi-camera Phase 2 testing
+  # All three loop the same synthetic video; add different videos when available
+  test2:
+    source: /test-media/test.mp4
+    sourceOnDemand: true
+    loop: true
+
+  test3:
+    source: /test-media/test.mp4
+    sourceOnDemand: true
     loop: true

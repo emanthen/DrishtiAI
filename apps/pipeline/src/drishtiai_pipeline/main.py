@@ -1,7 +1,8 @@
 """
-DrishtiAI pipeline — Phase 1: single-camera, OpenCV + PaddleOCR.
+DrishtiAI pipeline — Phase 2: multi-camera, GStreamer capture + PaddleOCR +
+multi-frame voter + alert engine.
 
-Phase 2: Replace with DeepStream multi-stream pipeline.
+Phase 3: Replace capture with DeepStream (nvcr.io/nvidia/deepstream).
 """
 import logging
 import signal
@@ -16,12 +17,15 @@ from sqlalchemy import select
 
 from drishtiai_shared.db import SessionLocal
 from drishtiai_shared.models.camera import Camera
+from drishtiai_pipeline import gst_capture
 from drishtiai_pipeline.capture import StreamCapture
 from drishtiai_pipeline.config import settings
 from drishtiai_pipeline.dedup import PlateDeduplicator
 from drishtiai_pipeline.health import CameraHealthReporter
-from drishtiai_pipeline.ocr import detect_plates
+from drishtiai_pipeline.ocr import PlateDetection, detect_plates
+from drishtiai_pipeline.voter import PlateVoter
 from drishtiai_pipeline.writer import write_plate_event
+from drishtiai_pipeline import alert_engine
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -57,12 +61,49 @@ def process_camera(camera: Camera) -> None:
     )
     db = SessionLocal()
 
+    # Gate repeated emits of the same plate (e.g. looping test video)
     dedup = PlateDeduplicator(window_seconds=settings.pipeline_dedup_seconds)
+
+    def _on_consensus(det: PlateDetection) -> None:
+        if det.confidence < settings.pipeline_ocr_confidence_threshold:
+            return
+        if not dedup.is_new(det.text):
+            return
+        try:
+            event = write_plate_event(
+                detection=det,
+                camera_id=camera_id,
+                site_id=site_id,
+                db=db,
+                minio_client=minio,
+                redis_client=r,
+                snapshot_bucket=settings.minio_bucket_snapshots,
+            )
+            alert_engine.check_and_fire(
+                db=db,
+                redis_client=r,
+                site_id=site_id,
+                event_id=event.id,
+                plate_text=det.text,
+            )
+        except Exception:
+            logger.exception("Failed to write plate event for %s", det.text)
+
+    voter = PlateVoter(
+        on_plate=_on_consensus,
+        window_s=settings.pipeline_voter_window_s,
+        exit_gap_s=settings.pipeline_voter_exit_gap_s,
+        min_reads=settings.pipeline_voter_min_reads,
+    )
+
     health = CameraHealthReporter(camera_id, db, r)
-    capture = StreamCapture(
+
+    # Prefer GStreamer; fall back to OpenCV if unavailable
+    capture = gst_capture.make_capture(
         stream_url=camera.stream_url,
         camera_id=str(camera_id),
         frame_sample=settings.pipeline_frame_sample,
+        fallback_cls=StreamCapture,
     )
 
     mjpeg_counter = 0
@@ -73,7 +114,6 @@ def process_camera(camera: Camera) -> None:
 
             health.record_frame()
 
-            # Publish MJPEG frame to Redis for live view
             mjpeg_counter += 1
             if mjpeg_counter % settings.pipeline_mjpeg_every_n == 0:
                 try:
@@ -82,27 +122,11 @@ def process_camera(camera: Camera) -> None:
                 except Exception:
                     pass
 
-            # Plate detection + OCR
             detections = detect_plates(frame_bgr)
-            for det in detections:
-                if det.confidence < settings.pipeline_ocr_confidence_threshold:
-                    continue
-                if not dedup.is_new(det.text):
-                    continue
-                try:
-                    write_plate_event(
-                        detection=det,
-                        camera_id=camera_id,
-                        site_id=site_id,
-                        db=db,
-                        minio_client=minio,
-                        redis_client=r,
-                        snapshot_bucket=settings.minio_bucket_snapshots,
-                    )
-                except Exception:
-                    logger.exception("Failed to write plate event for %s", det.text)
+            voter.update(detections, ts)
 
     finally:
+        voter.flush()
         capture.release()
         db.close()
         r.close()
@@ -110,7 +134,9 @@ def process_camera(camera: Camera) -> None:
 
 
 def main() -> None:
-    logger.info("DrishtiAI pipeline starting (Phase 1 — OpenCV + PaddleOCR)")
+    logger.info(
+        "DrishtiAI pipeline starting (Phase 2 — GStreamer/OpenCV + PaddleOCR + voter + alert engine)"
+    )
 
     db = SessionLocal()
     try:
@@ -128,14 +154,17 @@ def main() -> None:
 
     logger.info("Processing %d camera(s): %s", len(cameras), [c.name for c in cameras])
 
-    # Phase 1: process cameras sequentially in threads (one thread per camera)
-    # Phase 2: DeepStream handles all streams in a single pipeline
     threads = []
     for camera in cameras:
         if not camera.stream_url:
             logger.warning("Camera %s has no stream URL — skipping", camera.name)
             continue
-        t = threading.Thread(target=process_camera, args=(camera,), name=f"cam-{camera.id}", daemon=True)
+        t = threading.Thread(
+            target=process_camera,
+            args=(camera,),
+            name=f"cam-{camera.id}",
+            daemon=True,
+        )
         t.start()
         threads.append(t)
 

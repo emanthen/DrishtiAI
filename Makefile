@@ -1,4 +1,4 @@
-.PHONY: dev test lint build clean install help
+.PHONY: dev test lint build clean install help migrate seed seed-dev generate-test-video benchmark
 
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
@@ -67,3 +67,25 @@ licenses: ## Generate LICENSES.md (requires pip-licenses and license-checker)
 backup: ## Create a full backup bundle
 	$(COMPOSE) exec postgres pg_dump -U drishtiai drishtiai > deploy/backups/postgres_$$(date +%Y%m%d_%H%M%S).sql
 	@echo "Backup complete."
+
+migrate: ## Run Alembic migrations against the local Postgres (requires dev-infra running)
+	cd packages/shared-python && uv run alembic upgrade head
+
+seed: ## Seed superadmin user (set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD env vars)
+	uv run python apps/api/scripts/seed_superadmin.py
+
+seed-dev: ## Seed dev environment: org + site + superadmin + mediamtx test camera
+	uv run python apps/api/scripts/seed_dev_data.py
+
+generate-test-video: ## Generate synthetic Phase 1 test video and ground truth JSON
+	uv run python ml/benchmarks/synthetic/generate_test_video.py \
+		--output ml/benchmarks/phase1.mp4 \
+		--gt ml/benchmarks/phase1_gt.json
+	mkdir -p deploy/compose/test-media
+	cp ml/benchmarks/phase1.mp4 deploy/compose/test-media/test.mp4
+	@echo "Test video ready at deploy/compose/test-media/test.mp4"
+
+benchmark: ## Evaluate Phase 1 recall against running stack (run after 'make dev')
+	uv run python ml/benchmarks/eval_phase1.py \
+		--gt ml/benchmarks/phase1_gt.json \
+		--db postgresql://drishtiai:drishtiai@localhost:5432/drishtiai

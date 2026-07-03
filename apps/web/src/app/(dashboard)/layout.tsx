@@ -39,7 +39,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex-1 py-2">
           <NavItem href="/" label="Live view" />
           <NavItem href="/events" label="Events" />
+          <NavItem href="/alerts" label="Alerts" />
           <NavItem href="/cameras" label="Cameras" />
+          <NavItem href="/watchlists" label="Watchlists" />
         </div>
 
         <div className="px-4 py-3 border-t border-hairline dark:border-hairline-dark">

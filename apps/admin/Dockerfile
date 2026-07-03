@@ -14,9 +14,11 @@ COPY pyproject.toml /app/pyproject.toml
 
 RUN uv sync --package drishtiai-admin --no-dev
 
+COPY apps/admin/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 WORKDIR /app/apps/admin
 
 EXPOSE 8001
 
-CMD ["uv", "run", "python", "-m", "gunicorn", "drishtiai_admin.wsgi:application", \
-     "--bind", "0.0.0.0:8001", "--workers", "2", "--timeout", "120"]
+ENTRYPOINT ["/entrypoint.sh"]
