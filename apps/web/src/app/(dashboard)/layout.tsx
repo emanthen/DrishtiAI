@@ -1,19 +1,35 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
-import { api } from "@/lib/api";
+import { api, API_BASE } from "@/lib/api";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { accessToken, user, logout } = useAuthStore();
+  const [offlineCount, setOfflineCount] = useState(0);
 
   useEffect(() => {
     if (!accessToken) {
       router.replace("/login");
+      return;
     }
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API_BASE}/cameras/health-summary`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setOfflineCount(data.offline ?? 0);
+        }
+      } catch {}
+    }
+    checkHealth();
+    const id = setInterval(checkHealth, 30_000);
+    return () => clearInterval(id);
   }, [accessToken, router]);
 
   async function handleLogout() {
@@ -62,7 +78,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        {offlineCount > 0 && (
+          <div className="bg-alert/10 border-b border-alert/30 px-6 py-2 flex items-center gap-2">
+            <span className="inline-flex rounded-full h-2 w-2 bg-alert" />
+            <p className="text-xs font-semibold text-alert">
+              {offlineCount} camera{offlineCount > 1 ? "s" : ""} offline —{" "}
+              <Link href="/cameras" className="underline">view cameras</Link>
+            </p>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

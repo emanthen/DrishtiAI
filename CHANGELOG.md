@@ -9,6 +9,31 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-07-04
+
+### Added — Phase 10: Camera health monitoring
+
+**Pipeline (`health.py`)**
+- `SETEX camera:heartbeat:{id} 30 <json>` written every 10 s; TTL of 30 s means 3 missed heartbeats = key disappears; API reads this without subscribing to pub/sub
+- JSON payload: `{camera_id, status, fps, frames, ts}` — fps calculated over the last report interval
+- `drishti:system:camera_events` pub/sub channel receives a message on every status transition (online → offline, offline → online)
+- `stop()` / `mark_offline()` methods: called from `process_camera` finally-block; deletes the heartbeat key immediately on clean shutdown so the dashboard reflects reality within seconds instead of waiting for TTL expiry; also sets DB `health_status = offline`
+
+**API**
+- `GET /cameras/live-status` — reads all `camera:heartbeat:*` Redis keys; returns `[{camera_id, online, fps, last_seen_s}]` for every camera that has reported within the last 30 s; polling-safe (no WS subscription needed)
+- `GET /cameras/health-summary` — DB aggregate count `{online, offline, degraded, unknown, total}` by site; used by dashboard header
+
+**Web dashboard — cameras page**
+- Pulsing green dot (CSS `animate-ping`) for online cameras; solid red/grey for offline/unknown
+- FPS column — live value from `/cameras/live-status` (5 s polling)
+- "Last seen" column — seconds since last heartbeat
+- Camera list auto-refreshes every 10 s via `refetchInterval`
+- Offline count label under page title
+- Role selector in "Add camera" modal now includes `parking_entry` / `parking_exit` options
+
+**Web dashboard — layout**
+- Red banner below the sidebar appears when any camera is offline: "N cameras offline — view cameras"; polls `/cameras/health-summary` every 30 s; disappears immediately when all cameras recover
+
 ## [0.9.0] — 2026-07-04
 
 ### Added — Phase 9: User management

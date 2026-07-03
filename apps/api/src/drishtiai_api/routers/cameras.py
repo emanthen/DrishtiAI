@@ -1,13 +1,14 @@
+import json
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from drishtiai_shared.models.camera import Camera, CameraKind, CameraRole, HealthStatus
 from drishtiai_shared.models.user import UserRole
-from drishtiai_api.deps import CurrentUser, DbSession, require_role
+from drishtiai_api.deps import CurrentUser, DbSession, RedisClient, require_role
 
 router = APIRouter()
 
@@ -44,6 +45,22 @@ class CameraOut(BaseModel):
     resolution_h: int | None
 
     model_config = {"from_attributes": True}
+
+
+class LiveStatus(BaseModel):
+    camera_id: str
+    online: bool
+    fps: float
+    frames: int
+    last_seen_s: float | None
+
+
+class HealthSummary(BaseModel):
+    online: int
+    offline: int
+    degraded: int
+    unknown: int
+    total: int
 
 
 @router.get("", response_model=list[CameraOut])
@@ -138,6 +155,58 @@ async def camera_live_url(camera_id: uuid.UUID, current_user: CurrentUser, db: D
         "camera_id": str(camera_id),
         "mjpeg_url": f"/api/stream/{camera_id}/mjpeg",
     }
+
+
+@router.get("/live-status", response_model=list[LiveStatus])
+async def live_status(
+    current_user: CurrentUser,
+    redis: RedisClient,
+    site_id: Annotated[uuid.UUID | None, Query()] = None,
+    db: DbSession = None,  # type: ignore[assignment]
+) -> list[LiveStatus]:
+    """Real-time camera status from Redis heartbeat keys (30 s TTL)."""
+    import time as _time
+    keys = await redis.keys("camera:heartbeat:*")
+    result: list[LiveStatus] = []
+    for key in keys:
+        raw = await redis.get(key)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        age = _time.time() - data.get("ts", 0)
+        result.append(LiveStatus(
+            camera_id=data["camera_id"],
+            online=data.get("status") == "online",
+            fps=data.get("fps", 0.0),
+            frames=data.get("frames", 0),
+            last_seen_s=round(age, 1),
+        ))
+    return result
+
+
+@router.get("/health-summary", response_model=HealthSummary)
+async def health_summary(
+    current_user: CurrentUser,
+    db: DbSession,
+    site_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> HealthSummary:
+    """Count cameras by health status — used by the dashboard header."""
+    q = select(Camera.health_status, func.count(Camera.id)).group_by(Camera.health_status)
+    if site_id:
+        q = q.where(Camera.site_id == site_id)
+    rows = db.execute(q).all()
+    counts: dict[str, int] = {r[0].value: r[1] for r in rows}
+    total = sum(counts.values())
+    return HealthSummary(
+        online=counts.get("online", 0),
+        offline=counts.get("offline", 0),
+        degraded=counts.get("degraded", 0),
+        unknown=counts.get("unknown", 0),
+        total=total,
+    )
 
 
 @router.post("/discover", status_code=status.HTTP_501_NOT_IMPLEMENTED)

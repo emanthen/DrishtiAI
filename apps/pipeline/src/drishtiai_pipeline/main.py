@@ -141,6 +141,8 @@ def process_camera(camera: Camera) -> None:
             voter.update(detections, ts)
 
     finally:
+        health.stop()
+        health.mark_offline()
         voter.flush()
         capture.release()
         db.close()
