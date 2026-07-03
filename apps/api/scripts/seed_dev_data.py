@@ -20,6 +20,7 @@ from sqlalchemy import select
 from drishtiai_shared.db import SessionLocal
 from drishtiai_shared.models.camera import Camera, CameraKind, CameraRole, HealthStatus
 from drishtiai_shared.models.organization import Organization, PlanTier
+from drishtiai_shared.models.parking import Tariff
 from drishtiai_shared.models.site import Site
 from drishtiai_shared.models.user import User, UserRole
 from drishtiai_api.auth.password import hash_password
@@ -102,11 +103,75 @@ def main() -> None:
         else:
             print(f"Using existing camera: {cam.name}  ({cam.id})")
 
+        # Parking entry camera (test2 path)
+        entry_url = os.getenv("RTSP_ENTRY_URL", "rtsp://mediamtx:8554/test2")
+        entry_cam = db.scalar(
+            select(Camera).where(Camera.stream_url == entry_url).limit(1)
+        )
+        if entry_cam is None:
+            entry_cam = Camera(
+                id=uuid.uuid4(),
+                site_id=site.id,
+                name="Dev Entry Camera (mediamtx/test2)",
+                kind=CameraKind.ip,
+                stream_url=entry_url,
+                role=CameraRole.parking_entry,
+                health_status=HealthStatus.unknown,
+                enabled=True,
+            )
+            db.add(entry_cam)
+            db.flush()
+            print(f"Created parking_entry camera: {entry_cam.name}  ({entry_cam.id})")
+
+        # Parking exit camera (test3 path)
+        exit_url = os.getenv("RTSP_EXIT_URL", "rtsp://mediamtx:8554/test3")
+        exit_cam = db.scalar(
+            select(Camera).where(Camera.stream_url == exit_url).limit(1)
+        )
+        if exit_cam is None:
+            exit_cam = Camera(
+                id=uuid.uuid4(),
+                site_id=site.id,
+                name="Dev Exit Camera (mediamtx/test3)",
+                kind=CameraKind.ip,
+                stream_url=exit_url,
+                role=CameraRole.parking_exit,
+                health_status=HealthStatus.unknown,
+                enabled=True,
+            )
+            db.add(exit_cam)
+            db.flush()
+            print(f"Created parking_exit camera: {exit_cam.name}  ({exit_cam.id})")
+
+        # Default tariff
+        tariff = db.scalar(select(Tariff).where(Tariff.site_id == site.id).limit(1))
+        if tariff is None:
+            tariff = Tariff(
+                id=uuid.uuid4(),
+                site_id=site.id,
+                name="Standard Tariff",
+                rules_json={
+                    "currency": "NPR",
+                    "grace_minutes": 10,
+                    "tiers": [
+                        {"up_to_minutes": 60, "charge": 30},
+                        {"per_hour": 30, "max_per_day": 300},
+                    ],
+                },
+                active=True,
+            )
+            db.add(tariff)
+            db.flush()
+            print(f"Created tariff: {tariff.name}  ({tariff.id})")
+
         db.commit()
         print("\nDev seed complete.")
-        print(f"  Org:     {org.id}")
-        print(f"  Site:    {site.id}")
-        print(f"  Camera:  {cam.id}")
+        print(f"  Org:          {org.id}")
+        print(f"  Site:         {site.id}")
+        print(f"  ANPR camera:  {cam.id}")
+        print(f"  Entry camera: {entry_cam.id}")
+        print(f"  Exit camera:  {exit_cam.id}")
+        print(f"  Tariff:       {tariff.id}")
         print(f"\nLogin: {admin.email} / {os.getenv('SUPERADMIN_PASSWORD', 'devpassword123')}")
 
 

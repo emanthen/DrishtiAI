@@ -111,6 +111,40 @@ export const api = {
       }),
   },
 
+  parking: {
+    listActive: (token: string, siteId?: string) =>
+      request<ParkingSession[]>(
+        `/parking-sessions/active${siteId ? `?site_id=${siteId}` : ""}`,
+        { token },
+      ),
+    list: (token: string, params: ParkingParams = {}) => {
+      const q = new URLSearchParams();
+      if (params.siteId) q.set("site_id", params.siteId);
+      if (params.activeOnly) q.set("active_only", "true");
+      if (params.paymentStatus) q.set("payment_status", params.paymentStatus);
+      if (params.limit) q.set("limit", String(params.limit));
+      if (params.cursor) q.set("cursor", params.cursor);
+      return request<ParkingPage>(`/parking-sessions?${q}`, { token });
+    },
+    close: (token: string, id: string) =>
+      request<ParkingSession>(`/parking-sessions/${id}/close`, { method: "POST", body: "{}", token }),
+    markPaid: (token: string, id: string) =>
+      request<ParkingSession>(`/parking-sessions/${id}/mark-paid`, { method: "POST", body: "{}", token }),
+    waive: (token: string, id: string) =>
+      request<ParkingSession>(`/parking-sessions/${id}/waive`, { method: "POST", body: "{}", token }),
+  },
+
+  tariffs: {
+    list: (token: string, siteId?: string) =>
+      request<Tariff[]>(`/tariffs${siteId ? `?site_id=${siteId}` : ""}`, { token }),
+    create: (token: string, body: TariffCreate) =>
+      request<Tariff>("/tariffs", { method: "POST", body: JSON.stringify(body), token }),
+    patch: (token: string, id: string, body: Partial<TariffCreate>) =>
+      request<Tariff>(`/tariffs/${id}`, { method: "PATCH", body: JSON.stringify(body), token }),
+    delete: (token: string, id: string) =>
+      request<void>(`/tariffs/${id}`, { method: "DELETE", token }),
+  },
+
   alerts: {
     list: (token: string, params: AlertsParams = {}) => {
       const q = new URLSearchParams();
@@ -278,6 +312,52 @@ export interface AlertsParams {
   status?: AlertStatus;
   limit?: number;
   cursor?: string;
+}
+
+export type PaymentStatus = "pending" | "paid" | "waived" | "failed";
+
+export interface ParkingSession {
+  id: string;
+  site_id: string;
+  plate_id: string | null;
+  entry_event_id: string | null;
+  exit_event_id: string | null;
+  duration_s: number | null;
+  amount_due: number | null;
+  payment_status: PaymentStatus;
+  created_at: string;
+  plate_text: string | null;
+  entry_ts: string | null;
+  exit_ts: string | null;
+}
+
+export interface ParkingPage {
+  items: ParkingSession[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface ParkingParams {
+  siteId?: string;
+  activeOnly?: boolean;
+  paymentStatus?: PaymentStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface Tariff {
+  id: string;
+  site_id: string;
+  name: string;
+  rules_json: Record<string, unknown>;
+  active: boolean;
+}
+
+export interface TariffCreate {
+  site_id: string;
+  name: string;
+  rules_json: Record<string, unknown>;
+  active?: boolean;
 }
 
 export interface AlertCounts {

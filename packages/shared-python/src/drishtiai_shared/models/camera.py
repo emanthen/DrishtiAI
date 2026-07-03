@@ -17,7 +17,9 @@ class CameraKind(str, PyEnum):
 
 class CameraRole(str, PyEnum):
     anpr_lane = "anpr_lane"
-    parking = "parking"
+    parking_entry = "parking_entry"
+    parking_exit = "parking_exit"
+    parking = "parking"       # legacy / bidirectional
     perimeter = "perimeter"
     general = "general"
 

@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import auth, cameras, events, health, sites, system, watchlists, alerts, ws
+from .routers import auth, cameras, events, health, parking, sites, system, tariffs, watchlists, alerts, ws
 from .routers import stream
 
 app = FastAPI(
@@ -31,6 +31,8 @@ app.include_router(cameras.router, prefix="/cameras", tags=["cameras"])
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(watchlists.router, prefix="/watchlists", tags=["watchlists"])
 app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+app.include_router(parking.router, prefix="/parking-sessions", tags=["parking"])
+app.include_router(tariffs.router, prefix="/tariffs", tags=["tariffs"])
 app.include_router(stream.router, prefix="/stream", tags=["stream"])
 app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(ws.router, prefix="/ws", tags=["websocket"])

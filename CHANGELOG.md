@@ -9,6 +9,38 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-03
+
+### Added — Phase 3: Parking session tracking
+
+**Model**
+- `CameraRole`: added `parking_entry` and `parking_exit` values (VARCHAR column — no migration required)
+
+**Pipeline**
+- `parking_session.py`: session lifecycle manager — `parking_entry` cameras open a `ParkingSession` row and set a Redis key (`parking:open:{site_id}:{plate_norm}`, 24 h TTL); `parking_exit` cameras close the session, compute duration, apply the active site tariff, and delete the Redis key; publishes `session_opened` / `session_closed` to `drishti:{site_id}:parking`
+- `main.py`: calls `parking_session.on_plate_read` after `alert_engine.check_and_fire`
+
+**Tariff engine** (`_compute_charge`):
+- Tiered rules JSON: `grace_minutes`, `tiers` array with `up_to_minutes`/`charge` (flat) or `per_hour`/`max_per_day` entries
+- Default dev tariff: NPR 30 for first hour, NPR 30/h thereafter (max NPR 300/day), 10 min grace
+
+**API**
+- `GET /parking-sessions` — paginated list with `site_id`, `active_only`, `payment_status`, cursor filters
+- `GET /parking-sessions/active` — open sessions (no exit event)
+- `GET /parking-sessions/{id}` — single session with denormalised `plate_text`, `entry_ts`, `exit_ts`
+- `POST /parking-sessions/{id}/close` — manual close with tariff computation (for missed exit reads)
+- `POST /parking-sessions/{id}/mark-paid` — mark as paid
+- `POST /parking-sessions/{id}/waive` — waive charge
+- `GET/POST/PATCH/DELETE /tariffs` — tariff CRUD (site-scoped, site_admin+)
+- `WS /ws/parking` — real-time session open/close feed via Redis pub/sub
+
+**Web dashboard**
+- `/parking` — Active / All tabs; live duration counter ticking every second; NPR amount due; Close / Mark paid / Waive action buttons; WebSocket push on session events
+- Sidebar nav: added Parking link
+
+**Seed**
+- `seed_dev_data.py`: creates `parking_entry` camera (mediamtx/test2) + `parking_exit` camera (mediamtx/test3) + standard tariff
+
 ## [0.2.0] — 2026-07-03
 
 ### Added — Phase 2: Alert engine, watchlist management, GStreamer pipeline

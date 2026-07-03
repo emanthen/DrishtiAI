@@ -25,7 +25,7 @@ from drishtiai_pipeline.health import CameraHealthReporter
 from drishtiai_pipeline.ocr import PlateDetection, detect_plates
 from drishtiai_pipeline.voter import PlateVoter
 from drishtiai_pipeline.writer import write_plate_event
-from drishtiai_pipeline import alert_engine
+from drishtiai_pipeline import alert_engine, parking_session
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -85,6 +85,14 @@ def process_camera(camera: Camera) -> None:
                 site_id=site_id,
                 event_id=event.id,
                 plate_text=det.text,
+            )
+            parking_session.on_plate_read(
+                db=db,
+                r=r,
+                site_id=site_id,
+                event_id=event.id,
+                plate_text=det.text,
+                camera_role=camera.role,
             )
         except Exception:
             logger.exception("Failed to write plate event for %s", det.text)
