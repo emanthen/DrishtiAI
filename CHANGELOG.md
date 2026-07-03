@@ -9,6 +9,27 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-04
+
+### Added — Phase 6: Analytics dashboard
+
+**API** (`/analytics`)
+- `GET /analytics/overview` — stat card data: events today, active parking sessions, revenue today, open alerts, gate triggers today, active visitor passes; uses site timezone for day boundary
+- `GET /analytics/hourly-traffic?days=7` — plate-read count by hour-of-day (0–23), aggregated over last N days; all 24 hours always returned (zeros filled); uses `AT TIME ZONE` for local hour grouping
+- `GET /analytics/daily-revenue?days=14` — daily parking revenue (NPR) + closed session count; zero-filled for days with no data
+- `GET /analytics/occupancy` — entries and exits per hour over the last 24 h; drives area chart showing throughput trend
+- `GET /analytics/top-plates?days=30&limit=10` — most-seen plate texts with read counts
+- All queries are time-bounded to hit the `events` partition index
+
+**Web dashboard**
+- `/analytics` — site selector dropdown (multi-site users); Refresh button; all data fetched in a single `Promise.all`
+- 6 stat cards: Events today · Active sessions · Revenue today · Open alerts · Gate triggers · Active passes (open alerts card highlights red when > 0)
+- Hourly traffic bar chart (Recharts BarChart, last 7 days, hour labels)
+- Daily revenue bar chart (revenue + sessions dual bars, last 14 days)
+- Occupancy area chart (entries vs exits, last 24 h, gradient fill)
+- Top plates horizontal bar chart (proportional bars, ranked 1–10)
+- Analytics nav link added (second position in sidebar)
+
 ## [0.5.0] — 2026-07-04
 
 ### Added — Phase 5: Visitor pass management

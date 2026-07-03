@@ -111,6 +111,19 @@ export const api = {
       }),
   },
 
+  analytics: {
+    overview: (token: string, siteId?: string) =>
+      request<AnalyticsOverview>(`/analytics/overview${siteId ? `?site_id=${siteId}` : ""}`, { token }),
+    hourlyTraffic: (token: string, siteId?: string, days = 7) =>
+      request<HourlyBucket[]>(`/analytics/hourly-traffic?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    dailyRevenue: (token: string, siteId?: string, days = 14) =>
+      request<DailyRevenue[]>(`/analytics/daily-revenue?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    occupancy: (token: string, siteId?: string) =>
+      request<OccupancyBucket[]>(`/analytics/occupancy${siteId ? `?site_id=${siteId}` : ""}`, { token }),
+    topPlates: (token: string, siteId?: string, days = 30, limit = 10) =>
+      request<TopPlate[]>(`/analytics/top-plates?days=${days}&limit=${limit}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+  },
+
   visitorPasses: {
     list: (token: string, params: VisitorPassParams = {}) => {
       const q = new URLSearchParams();
@@ -364,6 +377,37 @@ export interface AlertsParams {
   status?: AlertStatus;
   limit?: number;
   cursor?: string;
+}
+
+export interface AnalyticsOverview {
+  events_today: number;
+  active_sessions: number;
+  revenue_today: number;
+  open_alerts: number;
+  gate_triggers_today: number;
+  active_passes: number;
+}
+
+export interface HourlyBucket {
+  hour: number;
+  count: number;
+}
+
+export interface DailyRevenue {
+  date: string;
+  revenue: number;
+  sessions: number;
+}
+
+export interface OccupancyBucket {
+  hour: string;
+  entries: number;
+  exits: number;
+}
+
+export interface TopPlate {
+  plate_text: string;
+  count: number;
 }
 
 export interface VisitorPass {
