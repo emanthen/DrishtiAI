@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from drishtiai_shared.models.alert import Alert, AlertStatus
 from drishtiai_shared.models.watchlist import Watchlist, WatchlistEntry, PlatePattern
+from drishtiai_pipeline.webhook_fire import fire as _fire_webhooks
 
 log = logging.getLogger(__name__)
 
@@ -151,5 +152,19 @@ def check_and_fire(
             title="DrishtiAI Alert",
             body=f"Plate {plate_text} matched a watchlist",
         )
+        # Best-effort outbound webhooks
+        try:
+            _fire_webhooks(
+                db=db,
+                site_id=site_id,
+                event_type="alert_new",
+                payload={
+                    "alert_id": str(created_ids[0]),
+                    "plate_text": plate_text,
+                    "event_id": str(event_id),
+                },
+            )
+        except Exception as exc:
+            log.debug("webhook fire failed: %s", exc)
 
     return created_ids

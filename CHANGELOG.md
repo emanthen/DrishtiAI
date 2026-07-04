@@ -9,6 +9,35 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-07-04
+
+### Added — Phase 13: Celery Beat + outbound webhooks
+
+**Celery Beat scheduler**
+- `celery_app.py` — added `beat_schedule` config with two entries:
+  - `daily-reports` — `crontab(hour=0, minute=30)` → `run_daily_reports`
+  - `nightly-retention` — `crontab(hour=2, minute=0)` → `run_retention_all_sites`
+- `tasks/scheduled.py` — fan-out tasks that query all active `sites` rows and dispatch per-site `generate_daily_report` / `enforce_retention_policy` tasks; Beat only needs one schedule entry per job type
+- `beat` service added to Docker Compose (reuses the worker Dockerfile, runs `celery beat`); separate from the worker service so Beat can be scaled/restarted independently
+
+**Outbound webhook integrations**
+- `Webhook` SQLAlchemy model (`packages/shared-python`) — `site_id`, `name`, `url`, optional `secret` (HMAC-SHA256), `events` (Postgres ARRAY; empty = subscribe to all), `enabled`, `last_triggered_at`, `last_status_code`
+- Migration `0003_webhooks.py` — creates `webhooks` table with `ix_webhooks_site_id` index
+- `apps/pipeline/src/drishtiai_pipeline/webhook_fire.py` — `fire(db, site_id, event_type, payload)`: loads enabled webhooks, signs payload with `X-Drishti-Signature: sha256=…` (GitHub-style), POST via stdlib `urllib.request`; updates `last_triggered_at` + `last_status_code` per delivery; swallows exceptions
+- `alert_engine.py` — calls `webhook_fire.fire(event_type="alert_new", …)` after committing alerts (best-effort, same pattern as push notifications)
+- Supported event types: `plate_read`, `alert_new`, `alert_resolved`, `gate_trigger`, `camera_offline`, `parking_open`, `parking_close`
+
+**API** (`GET|POST|PATCH|DELETE /webhooks`, `POST /webhooks/{id}/test`)
+- Full CRUD — site_admin+ scoped to their sites; superadmin sees all
+- `POST /webhooks/{id}/test` — sends a synthetic `{"event":"ping"}` payload to the URL, returns `{status_code, ok, error}`; records the attempt on the Webhook row
+- `WebhookOut` schema hides the secret (returns `has_secret: bool` instead)
+- Router mounted at `/webhooks` in `main.py`
+
+**Web dashboard** (`/webhooks`)
+- List of registered webhooks with name, URL, enabled/disabled badge, signed badge, subscribed event tags, last-triggered timestamp + HTTP status
+- "+ Add webhook" inline form: name, site ID, URL, optional signing secret, event multi-select toggles
+- Per-row: Test button (fires ping, shows HTTP result inline), Enable/Disable toggle, Delete
+
 ## [0.12.0] — 2026-07-04
 
 ### Added — Complete stack: worker tasks, observability, retention

@@ -12,6 +12,7 @@ from .access import VisitorPass
 from .user import User
 from .audit import AuditLog
 from .retention import RetentionPolicy
+from .webhook import Webhook, WebhookEvent
 
 __all__ = [
     "Organization",
@@ -31,4 +32,6 @@ __all__ = [
     "User",
     "AuditLog",
     "RetentionPolicy",
+    "Webhook",
+    "WebhookEvent",
 ]
