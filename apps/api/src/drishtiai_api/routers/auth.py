@@ -1,11 +1,12 @@
 from datetime import timedelta, timezone, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from jose import JWTError
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 
 from drishtiai_shared.models.user import User
+from drishtiai_api.audit import log_action
 from drishtiai_api.auth.password import verify_password
 from drishtiai_api.auth.tokens import (
     ACCESS_TOKEN_TYPE,
@@ -36,9 +37,15 @@ class RefreshRequest(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: DbSession) -> TokenResponse:
+async def login(body: LoginRequest, request: Request, db: DbSession) -> TokenResponse:
+    client_ip = request.client.host if request.client else None
     user = db.scalar(select(User).where(User.email == body.email))
     if user is None or not verify_password(body.password, user.password_hash):
+        log_action(db, actor_id=user.id if user else None,
+                   action="user.login_failed",
+                   target_type="user", target_id=body.email,
+                   ip=client_ip)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -48,6 +55,9 @@ async def login(body: LoginRequest, db: DbSession) -> TokenResponse:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account disabled",
         )
+    log_action(db, actor_id=user.id, action="user.login_success",
+               target_type="user", target_id=str(user.id), ip=client_ip)
+    db.commit()
     return TokenResponse(
         access_token=create_access_token(str(user.id), user.role.value),
         refresh_token=create_refresh_token(str(user.id)),
@@ -80,11 +90,10 @@ async def refresh(body: RefreshRequest, db: DbSession, redis: RedisClient) -> To
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(current_user: CurrentUser, redis: RedisClient) -> None:
-    # Revoke the access token by adding its jti to the denylist.
-    # The refresh token is client-side discarded; we rely on short expiry.
-    # In Phase 2: add refresh token jti tracking.
-    pass
+async def logout(current_user: CurrentUser, db: DbSession, redis: RedisClient) -> None:
+    log_action(db, actor_id=current_user.id, action="user.logout",
+               target_type="user", target_id=str(current_user.id))
+    db.commit()
 
 
 @router.get("/me")

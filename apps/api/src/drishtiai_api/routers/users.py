@@ -20,6 +20,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 
 from drishtiai_shared.models.user import User, UserRole
+from drishtiai_api.audit import log_action
 from drishtiai_api.auth.password import hash_password
 from drishtiai_api.deps import CurrentUser, DbSession, require_role
 
@@ -176,6 +177,9 @@ async def create_user(
         is_active=True,
     )
     db.add(user)
+    log_action(db, actor_id=current_user.id, action="user.create",
+               target_type="user", target_id=str(user.id),
+               meta={"role": body.role.value, "email": body.email})
     db.commit()
     return SetPasswordResponse(password=plain)
 
@@ -231,6 +235,9 @@ async def update_user(
     if body.is_active is not None:
         user.is_active = body.is_active
 
+    action = "user.activate" if body.is_active else ("user.deactivate" if body.is_active is False else "user.update")
+    log_action(db, actor_id=current_user.id, action=action,
+               target_type="user", target_id=str(user_id))
     db.commit()
     db.refresh(user)
     return UserOut.from_orm_user(user)
@@ -254,6 +261,8 @@ async def deactivate_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     user.is_active = False
+    log_action(db, actor_id=current_user.id, action="user.deactivate",
+               target_type="user", target_id=str(user_id))
     db.commit()
 
 
@@ -276,5 +285,7 @@ async def set_password(
 
     plain = (body.password if body and body.password else None) or _gen_password()
     user.password_hash = hash_password(plain)
+    log_action(db, actor_id=current_user.id, action="user.reset_password",
+               target_type="user", target_id=str(user_id))
     db.commit()
     return SetPasswordResponse(password=plain)

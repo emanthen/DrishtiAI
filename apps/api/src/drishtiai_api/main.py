@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from .config import settings
-from .routers import analytics, auth, cameras, events, gates, health, notifications, parking, reports, sites, system, tariffs, users, visitor_passes, watchlists, alerts, ws, webhooks
+from .routers import analytics, audit, auth, cameras, events, gates, health, notifications, parking, reports, sites, system, tariffs, users, visitor_passes, watchlists, alerts, ws, webhooks
 from .routers import stream
 
 app = FastAPI(
@@ -42,6 +42,7 @@ app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(stream.router, prefix="/stream", tags=["stream"])
 app.include_router(system.router, prefix="/system", tags=["system"])
+app.include_router(audit.router, prefix="/audit-logs", tags=["audit"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 

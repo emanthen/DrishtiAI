@@ -9,6 +9,25 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-07-04
+
+### Added — Phase 14: Audit logging + real system health probes
+
+**Audit logging**
+- `apps/api/src/drishtiai_api/audit.py` — `log_action(db, actor_id, action, target_type, target_id, ip, meta)` helper; adds to the DB session without committing so it participates in the surrounding transaction
+- `routers/auth.py` — logs `user.login_success`, `user.login_failed` (with client IP via `Request`), and `user.logout`
+- `routers/users.py` — logs `user.create`, `user.update`, `user.activate`, `user.deactivate`, `user.reset_password`
+- `GET /audit-logs` — paginated, cursor-based; filterable by `action` (prefix), `actor_user_id`, `target_type`, `target_id`, time range; accessible to superadmin, site_admin, and auditor roles; results ordered newest-first
+- Web dashboard `/audit` — table with time, action badge (colour-coded by severity), truncated actor UUID, target type+id, IP, meta JSON; filter form for action/actor/target; cursor-based "Load more" pagination
+
+**System health probes** (`GET /system/health`)
+- Postgres: `SELECT 1` through the existing DB session — confirms connectivity and migrations ran
+- Redis: `await redis.ping()` — async PING through the existing aioredis client
+- MinIO: `list_buckets()` via the existing Minio client (sync, run in executor) — confirms credentials and bucket access
+- Pipeline: counts `camera:heartbeat:*` keys in Redis — reports how many cameras are currently reporting heartbeats
+- Returns `{ok: bool, api, database, redis, minio, pipeline}` each with `{status, detail}`;  `ok` is false if any component is in error state
+- Replaces the previous stub that returned `"unknown"` for all non-API components
+
 ## [0.13.0] — 2026-07-04
 
 ### Added — Phase 13: Celery Beat + outbound webhooks
