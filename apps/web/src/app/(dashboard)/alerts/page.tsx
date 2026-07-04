@@ -152,7 +152,7 @@ function AlertRow({
       {/* Plate */}
       <div className="shrink-0">
         {alert.plate_text ? (
-          <PlateStrip text={alert.plate_text} confidence={1} isNew={isNew} />
+          <PlateStrip plateText={alert.plate_text} confidence={1} isNew={isNew} />
         ) : (
           <span className="text-xs text-steel">—</span>
         )}

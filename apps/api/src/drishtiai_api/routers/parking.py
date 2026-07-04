@@ -133,7 +133,16 @@ async def list_sessions(
     items = [_enrich(s, db) for s in rows[:limit]]
     next_cursor = items[-1].created_at.isoformat() if len(rows) > limit else None
 
-    total = db.scalar(select(func.count(ParkingSession.id))) or 0
+    count_q = select(func.count(ParkingSession.id))
+    if site_id:
+        count_q = count_q.where(ParkingSession.site_id == site_id)
+    elif current_user.site_ids:
+        count_q = count_q.where(ParkingSession.site_id.in_(current_user.site_ids))
+    if active_only:
+        count_q = count_q.where(ParkingSession.exit_event_id.is_(None))
+    if payment_status:
+        count_q = count_q.where(ParkingSession.payment_status == payment_status)
+    total = db.scalar(count_q) or 0
     return ParkingPage(items=items, total=total, next_cursor=next_cursor)
 
 

@@ -12,11 +12,11 @@ import {
   Site,
 } from "@/lib/api";
 
-// ── Palette tokens (must match Tailwind config) ───────────────────────────────
-const SIGNAL  = "#3B82F6";
-const CONFIRM = "#22C55E";
-const ALERT   = "#EF4444";
-const STEEL   = "#94A3B8";
+// ── Palette tokens — must match packages/ui/src/tokens/colors.ts ──────────────
+const SIGNAL  = "#2C6EFB";
+const CONFIRM = "#1F8A5C";
+const ALERT   = "#E14C3A";
+const STEEL   = "#5B6470";
 
 const HOUR_LABELS = ["12a","1","2","3","4","5","6","7","8","9","10","11",
                      "12p","1","2","3","4","5","6","7","8","9","10","11"];
@@ -26,7 +26,7 @@ function StatCard({
   label, value, sub, accent = false,
 }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
   return (
-    <div className="rounded-xl border border-hairline dark:border-hairline-dark bg-white dark:bg-ink/40 px-5 py-4">
+    <div className="rounded-lg border border-hairline dark:border-hairline-dark bg-white dark:bg-ink/40 px-5 py-4">
       <p className="text-xs text-steel mb-1">{label}</p>
       <p className={`text-2xl font-semibold tabular-nums ${accent ? "text-alert" : "text-ink dark:text-bone"}`}>
         {value}
@@ -263,7 +263,7 @@ function ChartCard({
   title, sub, children,
 }: { title: string; sub: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-hairline dark:border-hairline-dark bg-white dark:bg-ink/40 px-5 py-4">
+    <div className="rounded-lg border border-hairline dark:border-hairline-dark bg-white dark:bg-ink/40 px-5 py-4">
       <p className="text-sm font-medium text-ink dark:text-bone">{title}</p>
       <p className="text-[11px] text-steel mb-3">{sub}</p>
       {children}

@@ -16,7 +16,9 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from drishtiai_api.sanitize import strip_html
+from drishtiai_api.schemas import RequestModel
 from sqlalchemy import select
 
 from drishtiai_shared.models.user import User, UserRole
@@ -63,26 +65,36 @@ class UserOut(BaseModel):
         )
 
 
-class UserCreate(BaseModel):
-    name: str
+class UserCreate(RequestModel):
+    name: str = Field(min_length=1, max_length=255)
     email: EmailStr
-    phone: str | None = None
+    phone: str | None = Field(default=None, max_length=30)
     role: UserRole
-    site_ids: list[str] = []
-    password: str | None = None  # omit to auto-generate
+    site_ids: list[str] = Field(default_factory=list, max_length=50)
+    password: str | None = Field(default=None, min_length=8, max_length=1024)
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return strip_html(v).strip()
 
 
-class UserPatch(BaseModel):
-    name: str | None = None
+class UserPatch(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     email: EmailStr | None = None
-    phone: str | None = None
+    phone: str | None = Field(default=None, max_length=30)
     role: UserRole | None = None
-    site_ids: list[str] | None = None
+    site_ids: list[str] | None = Field(default=None, max_length=50)
     is_active: bool | None = None
 
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
 
-class SetPasswordBody(BaseModel):
-    password: str
+
+class SetPasswordBody(RequestModel):
+    password: str = Field(min_length=8, max_length=1024)
 
 
 class SetPasswordResponse(BaseModel):

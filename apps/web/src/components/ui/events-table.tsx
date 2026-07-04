@@ -86,20 +86,18 @@ export function EventsTable({ events, isLoading, newEventIds }: EventsTableProps
   );
 }
 
+const KIND_STYLES: Record<string, { label: string; cls: string }> = {
+  plate_read:   { label: "Plate read",    cls: "bg-confirm/15 text-confirm" },
+  watchlist_hit:{ label: "Watchlist hit", cls: "bg-alert/15 text-alert" },
+  wrong_way:    { label: "Wrong way",     cls: "bg-alert/15 text-alert" },
+  illegal_park: { label: "Illegal park",  cls: "bg-alert/10 text-alert" },
+  gate_open:    { label: "Gate open",     cls: "bg-signal/15 text-signal" },
+};
+
 function KindChip({ kind }: { kind: string }) {
-  const map: Record<string, { label: string; color: string }> = {
-    plate_read: { label: "Plate read", color: "#1F8A5C" },
-    watchlist_hit: { label: "Watchlist hit", color: "#E14C3A" },
-    wrong_way: { label: "Wrong way", color: "#E14C3A" },
-    illegal_park: { label: "Illegal park", color: "#E1A23A" },
-    gate_open: { label: "Gate open", color: "#2C6EFB" },
-  };
-  const cfg = map[kind] ?? { label: kind, color: "#5B6470" };
+  const cfg = KIND_STYLES[kind] ?? { label: kind, cls: "bg-steel/10 text-steel" };
   return (
-    <span
-      className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
-      style={{ backgroundColor: cfg.color }}
-    >
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${cfg.cls}`}>
       {cfg.label}
     </span>
   );

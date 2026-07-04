@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from drishtiai_shared.models.watchlist import (
@@ -12,23 +12,35 @@ from drishtiai_shared.models.watchlist import (
 )
 from drishtiai_shared.models.user import UserRole
 from drishtiai_api.deps import CurrentUser, DbSession
+from drishtiai_api.sanitize import strip_html
+from drishtiai_api.schemas import RequestModel
 
 router = APIRouter()
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
-class WatchlistCreate(BaseModel):
+class WatchlistCreate(RequestModel):
     site_id: uuid.UUID
-    name: str
+    name: str = Field(min_length=1, max_length=255)
     category: WatchlistCategory
-    alert_channels: list[str] = []
+    alert_channels: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return strip_html(v).strip()
 
 
-class WatchlistPatch(BaseModel):
-    name: str | None = None
+class WatchlistPatch(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     category: WatchlistCategory | None = None
-    alert_channels: list[str] | None = None
+    alert_channels: list[str] | None = Field(default=None, max_length=20)
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
 
 
 class WatchlistOut(BaseModel):
@@ -41,10 +53,23 @@ class WatchlistOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class EntryCreate(BaseModel):
-    plate_text: str
+class EntryCreate(RequestModel):
+    plate_text: str = Field(min_length=1, max_length=20)
     plate_pattern: PlatePattern = PlatePattern.exact
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("plate_text")
+    @classmethod
+    def normalise_plate(cls, v: str) -> str:
+        v = v.upper().strip().replace(" ", "").replace("-", "")
+        if not v or len(v) > 20:
+            raise ValueError("plate_text must be 1-20 alphanumeric chars after normalisation")
+        return v
+
+    @field_validator("notes")
+    @classmethod
+    def sanitize_notes(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
 
 
 class EntryOut(BaseModel):

@@ -22,11 +22,13 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
+from drishtiai_api.schemas import RequestModel
 from sqlalchemy import select, update
 
 from drishtiai_shared.models.webhook import Webhook, WebhookEvent
 from ..deps import CurrentUser, DbSession
+from ..http_safe import assert_public_url
 
 router = APIRouter()
 
@@ -35,19 +37,19 @@ _TIMEOUT_S = 5
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
-class WebhookCreate(BaseModel):
+class WebhookCreate(RequestModel):
     site_id: uuid.UUID
-    name: str
-    url: str
-    secret: str | None = None
-    events: list[WebhookEvent] = []
+    name: str = Field(min_length=1, max_length=255)
+    url: str = Field(min_length=1, max_length=2048)
+    secret: str | None = Field(default=None, max_length=256)
+    events: list[WebhookEvent] = Field(default_factory=list, max_length=20)
 
 
-class WebhookUpdate(BaseModel):
-    name: str | None = None
-    url: str | None = None
-    secret: str | None = None
-    events: list[WebhookEvent] | None = None
+class WebhookUpdate(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    url: str | None = Field(default=None, min_length=1, max_length=2048)
+    secret: str | None = Field(default=None, max_length=256)
+    events: list[WebhookEvent] | None = Field(default=None, max_length=20)
     enabled: bool | None = None
 
 
@@ -94,7 +96,7 @@ def _assert_site_access(current_user, site_id: uuid.UUID) -> None:
     from drishtiai_shared.models.user import UserRole
     if current_user.role == UserRole.superadmin:
         return
-    if site_id not in (current_user.site_ids or []):
+    if str(site_id) not in (current_user.site_ids or []):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No access to this site")
 
 
@@ -134,7 +136,7 @@ async def list_webhooks(
     q = select(Webhook)
     if current_user.role != UserRole.superadmin:
         allowed = current_user.site_ids or []
-        if site_id and site_id not in allowed:
+        if site_id and str(site_id) not in allowed:
             raise HTTPException(status.HTTP_403_FORBIDDEN)
         if site_id:
             q = q.where(Webhook.site_id == site_id)
@@ -153,6 +155,7 @@ async def create_webhook(
     db: DbSession,
 ):
     _assert_site_access(current_user, body.site_id)
+    assert_public_url(body.url)
     wh = Webhook(
         id=uuid.uuid4(),
         site_id=body.site_id,
@@ -193,7 +196,9 @@ async def update_webhook(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     _assert_site_access(current_user, wh.site_id)
     if body.name    is not None: wh.name    = body.name
-    if body.url     is not None: wh.url     = body.url
+    if body.url     is not None:
+        assert_public_url(body.url)
+        wh.url = body.url
     if body.secret  is not None: wh.secret  = body.secret
     if body.events  is not None: wh.events  = [e.value for e in body.events]
     if body.enabled is not None: wh.enabled = body.enabled
@@ -235,7 +240,9 @@ async def test_webhook(
         "message": "DrishtiAI webhook test",
     }).encode()
 
-    result = _deliver(wh, body)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _deliver, wh, body)
 
     # Record the test attempt
     db.execute(

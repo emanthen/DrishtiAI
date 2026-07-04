@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from drishtiai_api.sanitize import strip_html
+from drishtiai_api.schemas import RequestModel
 from sqlalchemy import select, func
 
 from drishtiai_shared.models.alert import Alert, AlertStatus
@@ -42,11 +44,16 @@ class AlertsPage(BaseModel):
     next_cursor: str | None
 
 
-class AckBody(BaseModel):
-    notes: str | None = None
+class AckBody(RequestModel):
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("notes")
+    @classmethod
+    def sanitize_notes(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
 
 
-class SnoozeBody(BaseModel):
+class SnoozeBody(RequestModel):
     snooze_until: datetime
     notes: str | None = None
 

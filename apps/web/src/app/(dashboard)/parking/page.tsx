@@ -195,7 +195,7 @@ function SessionRow({
       {/* Plate */}
       <div className="shrink-0 w-36">
         {s.plate_text ? (
-          <PlateStrip text={s.plate_text} confidence={1} isNew={isNew} />
+          <PlateStrip plateText={s.plate_text} confidence={1} isNew={isNew} />
         ) : (
           <span className="text-xs text-steel font-mono">Unknown</span>
         )}

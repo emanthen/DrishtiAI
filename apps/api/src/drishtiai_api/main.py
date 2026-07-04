@@ -1,13 +1,26 @@
 import time
 import uuid
+from contextlib import asynccontextmanager
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from drishtiai_api.limiter import limiter
 
 from .config import settings
 from .routers import analytics, audit, auth, cameras, events, gates, health, notifications, parking, reports, sites, system, tariffs, users, visitor_passes, watchlists, alerts, ws, webhooks
 from .routers import stream
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    yield
+    await app.state.redis.aclose()
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -15,14 +28,17 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 app.include_router(health.router, tags=["health"])
@@ -57,4 +73,8 @@ async def add_request_id(request: Request, call_next):
     duration_ms = (time.perf_counter() - start) * 1000
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Response-Time-Ms"] = f"{duration_ms:.1f}"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     return response

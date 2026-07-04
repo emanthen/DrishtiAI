@@ -3,32 +3,60 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func
 
 from drishtiai_shared.models.camera import Camera, CameraKind, CameraRole, HealthStatus
 from drishtiai_shared.models.user import UserRole
 from drishtiai_api.deps import CurrentUser, DbSession, RedisClient, require_role
+from drishtiai_api.schemas import RequestModel
+from drishtiai_api.sanitize import strip_html
 
 router = APIRouter()
 
+_RTSP_SCHEMES = ("rtsp://", "rtsps://")
 
-class CameraCreate(BaseModel):
-    name: str
+
+class CameraCreate(RequestModel):
+    name: str = Field(min_length=1, max_length=255)
     site_id: uuid.UUID
     kind: CameraKind = CameraKind.ip
-    stream_url: str | None = None
+    stream_url: str | None = Field(default=None, max_length=2048)
     role: CameraRole = CameraRole.general
-    resolution_w: int | None = None
-    resolution_h: int | None = None
-    fps: float | None = None
+    resolution_w: int | None = Field(default=None, ge=1, le=15360)
+    resolution_h: int | None = Field(default=None, ge=1, le=8640)
+    fps: float | None = Field(default=None, gt=0, le=120)
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return strip_html(v).strip()
+
+    @field_validator("stream_url")
+    @classmethod
+    def validate_rtsp(cls, v: str | None) -> str | None:
+        if v is not None and not any(v.lower().startswith(s) for s in _RTSP_SCHEMES):
+            raise ValueError("stream_url must use rtsp:// or rtsps:// scheme")
+        return v
 
 
-class CameraPatch(BaseModel):
-    name: str | None = None
-    stream_url: str | None = None
+class CameraPatch(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    stream_url: str | None = Field(default=None, max_length=2048)
     role: CameraRole | None = None
     enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
+
+    @field_validator("stream_url")
+    @classmethod
+    def validate_rtsp(cls, v: str | None) -> str | None:
+        if v is not None and not any(v.lower().startswith(s) for s in _RTSP_SCHEMES):
+            raise ValueError("stream_url must use rtsp:// or rtsps:// scheme")
+        return v
 
 
 class CameraOut(BaseModel):
@@ -103,66 +131,11 @@ async def add_camera(
     return camera
 
 
-@router.get("/{camera_id}", response_model=CameraOut)
-async def get_camera(camera_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Camera:
-    camera = db.get(Camera, camera_id)
-    if camera is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
-    return camera
-
-
-@router.patch("/{camera_id}", response_model=CameraOut)
-async def patch_camera(
-    camera_id: uuid.UUID,
-    body: CameraPatch,
-    current_user: CurrentUser,
-    db: DbSession,
-) -> Camera:
-    if current_user.role not in (UserRole.superadmin, UserRole.site_admin):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
-
-    camera = db.get(Camera, camera_id)
-    if camera is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
-
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(camera, field, value)
-    db.commit()
-    db.refresh(camera)
-    return camera
-
-
-@router.get("/{camera_id}/health")
-async def camera_health(camera_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> dict:
-    camera = db.get(Camera, camera_id)
-    if camera is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
-    return {
-        "camera_id": str(camera_id),
-        "name": camera.name,
-        "health_status": camera.health_status.value,
-        "enabled": camera.enabled,
-    }
-
-
-@router.get("/{camera_id}/live")
-async def camera_live_url(camera_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> dict:
-    """Return the MJPEG stream URL for this camera (served by the pipeline)."""
-    camera = db.get(Camera, camera_id)
-    if camera is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
-    return {
-        "camera_id": str(camera_id),
-        "mjpeg_url": f"/api/stream/{camera_id}/mjpeg",
-    }
-
-
 @router.get("/live-status", response_model=list[LiveStatus])
 async def live_status(
     current_user: CurrentUser,
     redis: RedisClient,
     site_id: Annotated[uuid.UUID | None, Query()] = None,
-    db: DbSession = None,  # type: ignore[assignment]
 ) -> list[LiveStatus]:
     """Real-time camera status from Redis heartbeat keys (30 s TTL)."""
     import time as _time
@@ -215,3 +188,57 @@ async def discover_cameras(current_user: CurrentUser) -> dict:
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="ONVIF discovery not implemented — Phase 2",
     )
+
+
+@router.get("/{camera_id}", response_model=CameraOut)
+async def get_camera(camera_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Camera:
+    camera = db.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    return camera
+
+
+@router.patch("/{camera_id}", response_model=CameraOut)
+async def patch_camera(
+    camera_id: uuid.UUID,
+    body: CameraPatch,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> Camera:
+    if current_user.role not in (UserRole.superadmin, UserRole.site_admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
+    camera = db.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(camera, field, value)
+    db.commit()
+    db.refresh(camera)
+    return camera
+
+
+@router.get("/{camera_id}/health")
+async def camera_health(camera_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> dict:
+    camera = db.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    return {
+        "camera_id": str(camera_id),
+        "name": camera.name,
+        "health_status": camera.health_status.value,
+        "enabled": camera.enabled,
+    }
+
+
+@router.get("/{camera_id}/live")
+async def camera_live_url(camera_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> dict:
+    """Return the MJPEG stream URL for this camera (served by the pipeline)."""
+    camera = db.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    return {
+        "camera_id": str(camera_id),
+        "mjpeg_url": f"/api/stream/{camera_id}/mjpeg",
+    }

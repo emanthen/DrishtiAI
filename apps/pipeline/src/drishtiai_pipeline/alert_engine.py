@@ -43,10 +43,7 @@ def _send_push_notifications(
     pattern. Failures are swallowed — push is best-effort.
     """
     try:
-        # Collect all push token keys for this site via SMEMBERS on each user
-        # We store tokens under push_tokens:{user_id}; to find site users we
-        # scan push_tokens:* and send to all (site membership enforced at API).
-        keys = redis_client.keys("push_tokens:*")
+        keys = redis_client.keys(f"push_site_tokens:{site_id}:*")
         tokens: list[str] = []
         for key in keys:
             members = redis_client.smembers(key)

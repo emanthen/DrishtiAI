@@ -5,6 +5,7 @@ GET /system/health — returns per-component status and overall ok flag.
 from __future__ import annotations
 
 import asyncio
+import os
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -12,6 +13,8 @@ from sqlalchemy import text
 
 from drishtiai_api.deps import DbSession, RedisClient
 from drishtiai_api.storage import get_minio
+
+_WEAK_PASSWORDS = {"admin", "password", "grafana", "changeme", "123456", "drishtiai"}
 
 router = APIRouter()
 
@@ -67,6 +70,20 @@ async def system_health(db: DbSession, redis: RedisClient) -> SystemHealth:
         results["pipeline"] = ComponentStatus(status="error", detail=str(exc))
 
     results["api"] = ComponentStatus(status="ok")
+
+    # Warn on weak credentials — never fail health for this, just surface it
+    weak = []
+    if os.getenv("GRAFANA_PASSWORD", "") in _WEAK_PASSWORDS:
+        weak.append("GRAFANA_PASSWORD")
+    if os.getenv("MINIO_ROOT_PASSWORD", "") in _WEAK_PASSWORDS:
+        weak.append("MINIO_ROOT_PASSWORD")
+    if os.getenv("POSTGRES_PASSWORD", "") in _WEAK_PASSWORDS:
+        weak.append("POSTGRES_PASSWORD")
+    if weak:
+        results["api"] = ComponentStatus(
+            status="ok",
+            detail=f"WEAK_CREDENTIAL: {', '.join(weak)} — change before go-live",
+        )
 
     all_ok = all(c.status == "ok" for c in results.values())
     return SystemHealth(ok=all_ok, **results)

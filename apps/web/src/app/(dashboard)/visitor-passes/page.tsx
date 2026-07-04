@@ -248,7 +248,7 @@ function PassRow({ pass: p, onCancel }: { pass: VisitorPass; onCancel: () => voi
     <div className="flex items-center gap-4 p-3 rounded-lg border border-hairline dark:border-hairline-dark bg-white dark:bg-ink/40">
       {/* Plate */}
       <div className="shrink-0 w-36">
-        <PlateStrip text={p.plate} confidence={1} isNew={false} />
+        <PlateStrip plateText={p.plate} confidence={1} isNew={false} />
       </div>
 
       {/* Info */}

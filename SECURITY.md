@@ -63,9 +63,10 @@ Internet / external network
 ### Authentication and authorisation
 
 - **JWT tokens** — HS256 signed; access tokens expire in 15 minutes; refresh tokens expire in 7 days.
-- **Token revocation** — JTI denylist stored in Redis; logout immediately invalidates the token.
+- **Token revocation** — Refresh tokens are single-use. Each token hash (`sha256`) is stored in the `refresh_token_hashes` table; on use the record is revoked and a new token is issued. Logout bulk-revokes all active refresh tokens for the user. Access tokens are short-lived (15 min) and not individually revocable.
 - **Role hierarchy** — `superadmin > site_admin > manager > guard > resident > auditor`. All write operations enforce the caller's role and org/site scope.
-- **Passwords** — Hashed with Argon2id (via `passlib`). Minimum entropy enforced on auto-generated passwords (16 chars from letters + digits + `!@#$%`).
+- **Passwords** — Hashed with Argon2id (`argon2-cffi`, `time_cost=3, memory_cost=65536, parallelism=4, hash_len=32, salt_len=16`). Minimum entropy enforced on auto-generated passwords (16 chars from letters + digits + `!@#$%`).
+- **Account enumeration** — Login always runs the full Argon2id hash verify via a `DUMMY_HASH` for unknown users. All failure paths (wrong password, unknown user, inactive account) return `401 Invalid credentials` with an identical response body.
 
 ### Data protection
 
@@ -85,6 +86,7 @@ Internet / external network
 - Webhook payloads are signed with `X-Drishti-Signature: sha256=<hmac>` using a per-endpoint secret.
 - The secret is never returned in API responses after creation (`has_secret: bool` only).
 - Signing uses HMAC-SHA256 with the UTF-8 encoded secret and raw request body — compatible with GitHub webhook verification libraries.
+- Webhook destination URLs are validated at creation/update time: DNS-resolved and rejected if the resolved IP is RFC1918, loopback, link-local, or IPv6 ULA (SSRF protection).
 
 ### No telemetry
 
@@ -101,7 +103,7 @@ No usage data, crash reports, or analytics are sent anywhere.
 
 | Control | Value |
 |---|---|
-| Password hashing | Argon2id |
+| Password hashing | Argon2id (`time_cost=3, memory_cost=64 MiB, parallelism=4`) |
 | JWT signing | HS256, 50-char random key |
 | TLS version | 1.2+ (NGINX) |
 | Certificate | Installer-issued self-signed (swap for CA cert in production) |
@@ -110,11 +112,25 @@ No usage data, crash reports, or analytics are sent anywhere.
 | Redis auth | Not enabled by default; enable `requirepass` in `redis.conf` for multi-tenant environments |
 | Postgres auth | Password auth (`md5`); restrict `pg_hba.conf` to Docker internal network |
 | Audit retention | 365 days default; configurable via `retention_policies` table |
+| Gate ONVIF credentials | Encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256). Set `GATE_CREDENTIAL_KEY` in `.env`. |
+| Auth rate limiting | Login: 5/minute + 10/hour. Refresh: 30/minute (via slowapi). |
+| Weak credential detection | Startup health check warns on `admin`, `password`, `changeme`, etc. for `GRAFANA_PASSWORD`, `MINIO_ROOT_PASSWORD`, `POSTGRES_PASSWORD`. |
+| Request schema validation | All `Create`/`Patch` schemas use `extra="forbid"` — unknown fields rejected with 422. Field-level constraints: `name` ≤ 255 chars, `notes` ≤ 1000 chars, plate text normalised + ≤ 20 chars, RTSP URL scheme enforced, timezone IANA-validated. |
+| HTML injection | Free-text fields (`notes`, `name`, `address`) stripped of HTML tags via `nh3` on write. |
+| MinIO object key safety | `_safe_minio_key()` rejects keys containing `..` or absolute paths before any presigned URL is generated. |
+| MinIO presigned URL TTL | Default reduced from 3600s to 900s (15 min). Configurable via `MINIO_PRESIGNED_TTL_SECONDS`. |
+| Security response headers | All API responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`. |
+| Frontend CSP | `Content-Security-Policy`, `X-Frame-Options: DENY` added to all Next.js routes via `next.config.ts`. |
 
 ---
 
-## Known limitations
+## Known limitations and deferred items
 
-- Redis does not require a password by default. In shared-infrastructure environments, set `requirepass` and update `REDIS_URL` accordingly.
-- The self-signed TLS certificate will generate browser warnings. Replace with a proper CA certificate from your internal PKI or Let's Encrypt if the LAN has a domain.
-- JWT refresh tokens are not currently tracked in the denylist — a stolen refresh token can be used until it expires (7 days). Force-expire by rotating `API_SECRET_KEY` (this invalidates all existing tokens).
+| Item | Risk | Mitigation until fixed |
+|---|---|---|
+| Redis has no password by default | Medium — LAN-only, but shared infra risk | Set `requirepass` in `redis.conf` and update `REDIS_URL` |
+| Self-signed TLS cert | Low — browser warnings on LAN | Replace with CA cert from internal PKI or Let's Encrypt |
+| Access tokens not individually revocable | Low — 15 min TTL | Rotate `API_SECRET_KEY` to invalidate all tokens immediately |
+| Celery serializer | Already fixed | `task_serializer="json"` was already configured — no pickle |
+| CSRF | N/A | No cookie-based auth — JWT Bearer tokens not sent automatically by browsers |
+| Full CSP | Low — JSON-only API | Frontend CSP added to `next.config.ts`; API returns no HTML |

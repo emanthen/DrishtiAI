@@ -72,12 +72,12 @@ export default function ReportsPage() {
 
   return (
     <div className="p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold text-ink dark:text-bone mb-1">Reports</h1>
+      <h1 className="text-lg font-medium text-ink dark:text-bone mb-1">Reports</h1>
       <p className="text-sm text-steel mb-8">Export data as CSV or download a PDF daily summary.</p>
 
       {/* Date range */}
       <section className="mb-8">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-steel mb-3">Date range (CSV exports)</h2>
+        <h2 className="text-xs font-medium text-steel uppercase tracking-wide mb-3">Date range (CSV exports)</h2>
         <div className="flex gap-3 items-center">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-steel">From</label>
@@ -86,7 +86,7 @@ export default function ReportsPage() {
               value={from}
               max={to}
               onChange={(e) => setFrom(e.target.value)}
-              className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-2 text-sm bg-bone dark:bg-surface text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
+              className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-2 text-sm bg-bone dark:bg-ink/40 text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -97,7 +97,7 @@ export default function ReportsPage() {
               min={from}
               max={todayStr()}
               onChange={(e) => setTo(e.target.value)}
-              className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-2 text-sm bg-bone dark:bg-surface text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
+              className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-2 text-sm bg-bone dark:bg-ink/40 text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
             />
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function ReportsPage() {
 
       {/* CSV exports */}
       <section className="mb-8">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-steel mb-3">CSV exports</h2>
+        <h2 className="text-xs font-medium text-steel uppercase tracking-wide mb-3">CSV exports</h2>
         <div className="flex flex-col gap-3">
           {REPORTS.map((r) => {
             const filename = `${r.key}_${from}_${to}.csv`;
@@ -113,7 +113,7 @@ export default function ReportsPage() {
             return (
               <div
                 key={r.key}
-                className="flex items-center justify-between bg-bone dark:bg-surface border border-hairline dark:border-hairline-dark rounded-xl px-5 py-4"
+                className="flex items-center justify-between bg-bone dark:bg-ink/40 border border-hairline dark:border-hairline-dark rounded-lg px-5 py-4"
               >
                 <div>
                   <p className="font-semibold text-sm text-ink dark:text-bone">{r.label}</p>
@@ -134,8 +134,8 @@ export default function ReportsPage() {
 
       {/* PDF daily summary */}
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-steel mb-3">PDF daily summary</h2>
-        <div className="bg-bone dark:bg-surface border border-hairline dark:border-hairline-dark rounded-xl px-5 py-4">
+        <h2 className="text-xs font-medium text-steel uppercase tracking-wide mb-3">PDF daily summary</h2>
+        <div className="bg-bone dark:bg-ink/40 border border-hairline dark:border-hairline-dark rounded-lg px-5 py-4">
           <p className="text-xs text-steel mb-3">
             One-page summary with traffic overview, parking revenue, alert counts, top plates and hourly breakdown.
           </p>
@@ -147,7 +147,7 @@ export default function ReportsPage() {
                 value={pdfDate}
                 max={offsetDays(-1)}
                 onChange={(e) => setPdfDate(e.target.value)}
-                className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-2 text-sm bg-bone dark:bg-surface text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
+                className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-2 text-sm bg-bone dark:bg-ink/40 text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
               />
             </div>
             <button

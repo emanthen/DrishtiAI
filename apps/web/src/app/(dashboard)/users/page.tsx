@@ -5,12 +5,12 @@ import { useAuthStore } from "@/store/auth";
 import { API_BASE } from "@/lib/api";
 
 const ROLE_COLORS: Record<string, string> = {
-  superadmin: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
-  site_admin: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  manager: "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300",
-  guard: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
-  resident: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
-  auditor: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  superadmin: "bg-alert/15 text-alert border border-alert/30",
+  site_admin: "bg-signal/15 text-signal border border-signal/30",
+  manager:    "bg-confirm/15 text-confirm border border-confirm/30",
+  guard:      "bg-signal/10 text-signal border border-signal/20",
+  resident:   "bg-confirm/10 text-confirm border border-confirm/20",
+  auditor:    "bg-steel/10 text-steel border border-steel/20",
 };
 
 const ALL_ROLES = ["manager", "guard", "resident", "auditor", "site_admin", "superadmin"];
@@ -154,29 +154,29 @@ export default function UsersPage() {
 
       {/* Generated password banner */}
       {generatedPwd && (
-        <div className="mb-4 rounded-xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-5 py-3 flex items-center justify-between">
-          <span className="text-sm text-green-800 dark:text-green-300">
+        <div className="mb-4 rounded-lg border border-confirm/30 bg-confirm/10 px-5 py-3 flex items-center justify-between">
+          <span className="text-sm text-confirm">
             User created. Temporary password: <code className="font-mono font-bold">{generatedPwd}</code>
           </span>
-          <button onClick={() => setGeneratedPwd(null)} className="text-green-600 ml-4 text-lg leading-none">×</button>
+          <button onClick={() => setGeneratedPwd(null)} className="text-confirm ml-4 text-lg leading-none">×</button>
         </div>
       )}
 
       {/* Reset password banner */}
       {resetPwd && (
-        <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 px-5 py-3 flex items-center justify-between">
-          <span className="text-sm text-blue-800 dark:text-blue-300">
+        <div className="mb-4 rounded-lg border border-signal/30 bg-signal/10 px-5 py-3 flex items-center justify-between">
+          <span className="text-sm text-signal">
             New password for {users.find((u) => u.id === resetPwd.id)?.name}: <code className="font-mono font-bold">{resetPwd.pwd}</code>
           </span>
-          <button onClick={() => setResetPwd(null)} className="text-blue-600 ml-4 text-lg leading-none">×</button>
+          <button onClick={() => setResetPwd(null)} className="text-signal ml-4 text-lg leading-none">×</button>
         </div>
       )}
 
       {/* Create form */}
       {showCreate && (
-        <div className="mb-6 bg-bone dark:bg-surface border border-hairline dark:border-hairline-dark rounded-xl p-5">
+        <div className="mb-6 bg-bone dark:bg-ink/40 border border-hairline dark:border-hairline-dark rounded-lg p-5">
           <h2 className="font-semibold text-ink dark:text-bone mb-4">New user</h2>
-          {createError && <p className="text-sm text-red-500 mb-3">{createError}</p>}
+          {createError && <p className="text-sm text-alert mb-3">{createError}</p>}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-steel uppercase tracking-wide">Name *</label>
@@ -250,7 +250,7 @@ export default function UsersPage() {
       {/* Filters */}
       <div className="flex gap-3 mb-4">
         <select
-          className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-1.5 text-sm bg-bone dark:bg-surface text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
+          className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-1.5 text-sm bg-bone dark:bg-ink/40 text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
           value={filterRole}
           onChange={(e) => setFilterRole(e.target.value)}
         >
@@ -258,7 +258,7 @@ export default function UsersPage() {
           {ALL_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
         <select
-          className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-1.5 text-sm bg-bone dark:bg-surface text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
+          className="border border-hairline dark:border-hairline-dark rounded-lg px-3 py-1.5 text-sm bg-bone dark:bg-ink/40 text-ink dark:text-bone focus:outline-none focus:ring-2 focus:ring-signal"
           value={filterActive}
           onChange={(e) => setFilterActive(e.target.value as "" | "true" | "false")}
         >
@@ -274,10 +274,10 @@ export default function UsersPage() {
       ) : users.length === 0 ? (
         <p className="text-steel text-sm">No users found.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-hairline dark:border-hairline-dark">
+        <div className="overflow-x-auto rounded-lg border border-hairline dark:border-hairline-dark">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-hairline dark:border-hairline-dark bg-bone dark:bg-surface">
+              <tr className="border-b border-hairline dark:border-hairline-dark bg-bone dark:bg-ink/40">
                 <th className="text-left px-4 py-3 font-semibold text-steel uppercase text-xs tracking-wide">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-steel uppercase text-xs tracking-wide">Email</th>
                 <th className="text-left px-4 py-3 font-semibold text-steel uppercase text-xs tracking-wide">Role</th>
@@ -305,10 +305,10 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       u.is_active
-                        ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
-                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                        ? "bg-confirm/15 text-confirm"
+                        : "bg-steel/10 text-steel"
                     }`}>
                       {u.is_active ? "Active" : "Inactive"}
                     </span>
@@ -331,8 +331,8 @@ export default function UsersPage() {
                             onClick={() => toggleActive(u)}
                             className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
                               u.is_active
-                                ? "border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                                : "border-green-300 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
+                                ? "border-alert/40 text-alert hover:bg-alert/10"
+                                : "border-confirm/40 text-confirm hover:bg-confirm/10"
                             }`}
                           >
                             {u.is_active ? "Deactivate" : "Activate"}

@@ -1,29 +1,59 @@
 import uuid
 
+import zoneinfo
+
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from drishtiai_shared.models.site import Site
 from drishtiai_shared.models.user import UserRole
 from drishtiai_api.deps import CurrentUser, DbSession
+from drishtiai_api.sanitize import strip_html
+from drishtiai_api.schemas import RequestModel
 
 router = APIRouter()
 
+_VALID_TZ = zoneinfo.available_timezones()
 
-class SiteCreate(BaseModel):
+
+class SiteCreate(RequestModel):
     org_id: uuid.UUID
-    name: str
-    address: str | None = None
+    name: str = Field(min_length=1, max_length=255)
+    address: str | None = Field(default=None, max_length=500)
     timezone: str = "Asia/Kathmandu"
-    plate_region: str = "NP"
+    plate_region: str = Field(default="NP", min_length=2, max_length=10)
+
+    @field_validator("name", "address")
+    @classmethod
+    def sanitize_text(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_tz(cls, v: str) -> str:
+        if v not in _VALID_TZ:
+            raise ValueError(f"Unknown timezone: {v!r}")
+        return v
 
 
-class SitePatch(BaseModel):
-    name: str | None = None
-    address: str | None = None
+class SitePatch(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    address: str | None = Field(default=None, max_length=500)
     timezone: str | None = None
-    plate_region: str | None = None
+    plate_region: str | None = Field(default=None, min_length=2, max_length=10)
+
+    @field_validator("name", "address")
+    @classmethod
+    def sanitize_text(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_tz(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_TZ:
+            raise ValueError(f"Unknown timezone: {v!r}")
+        return v
 
 
 class SiteOut(BaseModel):

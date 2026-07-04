@@ -24,5 +24,13 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # MinIO presigned URL TTL — shorter for sensitive media
+    minio_presigned_ttl_seconds: int = 900  # 15 minutes
+
+    # Fernet key for encrypting ONVIF credentials at rest.
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Leave empty in dev — credentials stored plaintext with a warning.
+    gate_credential_key: str = ""
+
 
 settings = Settings()

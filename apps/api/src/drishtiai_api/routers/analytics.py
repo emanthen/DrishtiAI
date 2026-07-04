@@ -6,6 +6,7 @@ Timezone note: groupings use the site's stored timezone via AT TIME ZONE
 in Postgres; defaults to Asia/Kathmandu when not resolved.
 """
 import uuid
+import zoneinfo
 from datetime import datetime, timezone, timedelta
 from typing import Annotated
 
@@ -39,9 +40,15 @@ def _resolve_site(
     )
 
 
+_FALLBACK_TZ = "Asia/Kathmandu"
+_VALID_TZ = zoneinfo.available_timezones()
+
+
 def _site_tz(site_id: uuid.UUID, db: DbSession) -> str:
     site = db.get(Site, site_id)
-    return (site.timezone if site else None) or "Asia/Kathmandu"
+    tz = (site.timezone if site else None) or _FALLBACK_TZ
+    # Validate before embedding in SQL — rejects any non-IANA string
+    return tz if tz in _VALID_TZ else _FALLBACK_TZ
 
 
 def _today_start(tz: str) -> str:
@@ -133,13 +140,14 @@ async def hourly_traffic(
     sid = _resolve_site(site_id, current_user, db)
     tz = _site_tz(sid, db)
 
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
     rows = db.execute(text(
         f"SELECT EXTRACT(HOUR FROM ts AT TIME ZONE '{tz}')::int AS hour, COUNT(*)::int AS count "
-        f"FROM events "
-        f"WHERE site_id = :sid AND kind = 'plate_read' "
-        f"  AND ts >= NOW() - INTERVAL '{days} days' "
-        f"GROUP BY hour ORDER BY hour"
-    ), {"sid": sid}).all()
+        "FROM events "
+        "WHERE site_id = :sid AND kind = 'plate_read' "
+        "  AND ts >= :cutoff "
+        "GROUP BY hour ORDER BY hour"
+    ), {"sid": sid, "cutoff": cutoff}).all()
 
     by_hour = {r.hour: r.count for r in rows}
     return [HourlyBucket(hour=h, count=by_hour.get(h, 0)) for h in range(24)]
@@ -164,15 +172,16 @@ async def daily_revenue(
     sid = _resolve_site(site_id, current_user, db)
     tz = _site_tz(sid, db)
 
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
     rows = db.execute(text(
         f"SELECT (created_at AT TIME ZONE '{tz}')::date::text AS date, "
-        f"       COALESCE(SUM(amount_due), 0)::float AS revenue, "
-        f"       COUNT(*)::int AS sessions "
-        f"FROM parking_sessions "
-        f"WHERE site_id = :sid AND exit_event_id IS NOT NULL "
-        f"  AND created_at >= NOW() - INTERVAL '{days} days' "
-        f"GROUP BY date ORDER BY date"
-    ), {"sid": sid}).all()
+        "       COALESCE(SUM(amount_due), 0)::float AS revenue, "
+        "       COUNT(*)::int AS sessions "
+        "FROM parking_sessions "
+        "WHERE site_id = :sid AND exit_event_id IS NOT NULL "
+        "  AND created_at >= :cutoff "
+        "GROUP BY date ORDER BY date"
+    ), {"sid": sid, "cutoff": cutoff}).all()
 
     # Fill missing days with zeros
     today = datetime.now(tz=timezone.utc).date()
@@ -249,13 +258,14 @@ async def top_plates(
     """Most-seen plates in the last N days."""
     sid = _resolve_site(site_id, current_user, db)
 
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
     rows = db.execute(text(
         "SELECT p.text AS plate_text, COUNT(*)::int AS count "
         "FROM events e "
         "JOIN plates p ON e.plate_id = p.id "
         "WHERE e.site_id = :sid AND e.kind = 'plate_read' "
-        f"  AND e.ts >= NOW() - INTERVAL '{days} days' "
+        "  AND e.ts >= :cutoff "
         "GROUP BY p.text ORDER BY count DESC LIMIT :lim"
-    ), {"sid": sid, "lim": limit}).all()
+    ), {"sid": sid, "cutoff": cutoff, "lim": limit}).all()
 
     return [TopPlate(plate_text=r.plate_text, count=r.count) for r in rows]

@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 
 import redis.asyncio as aioredis
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -10,19 +10,14 @@ from sqlalchemy.orm import Session
 from drishtiai_shared.db import get_db
 from drishtiai_shared.models.user import User, UserRole
 from drishtiai_api.auth.tokens import ACCESS_TOKEN_TYPE, decode_token
-from drishtiai_api.config import settings
 
 _bearer = HTTPBearer(auto_error=True)
 
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-async def get_redis() -> aioredis.Redis:
-    r = aioredis.from_url(settings.redis_url, decode_responses=True)
-    try:
-        yield r
-    finally:
-        await r.aclose()
+async def get_redis(request: Request) -> aioredis.Redis:
+    yield request.app.state.redis
 
 
 RedisClient = Annotated[aioredis.Redis, Depends(get_redis)]

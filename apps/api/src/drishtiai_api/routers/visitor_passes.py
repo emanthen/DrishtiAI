@@ -3,7 +3,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+from drishtiai_api.sanitize import strip_html
+from drishtiai_api.schemas import RequestModel
 from sqlalchemy import select, func
 
 from drishtiai_shared.models.access import VisitorPass
@@ -15,18 +17,23 @@ router = APIRouter()
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
-class VisitorPassCreate(BaseModel):
+class VisitorPassCreate(RequestModel):
     site_id: uuid.UUID | None = None
-    plate: str
+    plate: str = Field(min_length=1, max_length=20)
     valid_from: datetime
     valid_to: datetime
     single_use: bool = True
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=1000)
 
     @field_validator("plate")
     @classmethod
     def normalise_plate(cls, v: str) -> str:
         return v.upper().strip().replace(" ", "").replace("-", "")
+
+    @field_validator("notes")
+    @classmethod
+    def sanitize_notes(cls, v: str | None) -> str | None:
+        return strip_html(v).strip() if v is not None else v
 
     @field_validator("valid_to")
     @classmethod
@@ -127,7 +134,15 @@ async def list_passes(
     rows = list(db.scalars(q).all())
     items = [_enrich(p) for p in rows[:limit]]
     next_cursor = items[-1].valid_from.isoformat() if len(rows) > limit else None
-    total = db.scalar(select(func.count(VisitorPass.id))) or 0
+    count_q = select(func.count(VisitorPass.id))
+    if site_id:
+        count_q = count_q.where(VisitorPass.site_id == site_id)
+    elif current_user.role != UserRole.superadmin and current_user.site_ids:
+        count_q = count_q.where(VisitorPass.site_id.in_(current_user.site_ids))
+    if host_user_id:
+        count_q = count_q.where(VisitorPass.host_user_id == host_user_id)
+    count_q = _apply_status_filter(count_q, pass_status)
+    total = db.scalar(count_q) or 0
     return VisitorPassPage(items=items, total=total, next_cursor=next_cursor)
 
 

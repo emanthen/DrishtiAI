@@ -1,7 +1,8 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from drishtiai_api.schemas import RequestModel
 from sqlalchemy import select
 
 from drishtiai_shared.models.parking import Tariff
@@ -13,15 +14,15 @@ router = APIRouter()
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
-class TariffCreate(BaseModel):
+class TariffCreate(RequestModel):
     site_id: uuid.UUID
-    name: str
+    name: str = Field(min_length=1, max_length=255)
     rules_json: dict
     active: bool = True
 
 
-class TariffPatch(BaseModel):
-    name: str | None = None
+class TariffPatch(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     rules_json: dict | None = None
     active: bool | None = None
 

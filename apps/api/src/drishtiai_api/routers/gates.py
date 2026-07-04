@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from drishtiai_api.schemas import RequestModel
 from sqlalchemy import select
 
 from drishtiai_shared.models.gate import (
@@ -18,7 +19,9 @@ from drishtiai_shared.models.gate import (
     GateTriggerLog,
 )
 from drishtiai_shared.models.user import UserRole
+from drishtiai_api.config import settings
 from drishtiai_api.deps import CurrentUser, DbSession
+from drishtiai_api.gate_creds import decrypt_config, encrypt_config, redact_config
 
 router = APIRouter()
 
@@ -28,7 +31,7 @@ _HTTP_TIMEOUT_S = 5
 def _fire_controller(gc: GateController) -> None:
     """Send an open command to a gate controller (webhook or ONVIF)."""
     if gc.kind == GateKind.onvif:
-        cfg = gc.config
+        cfg = decrypt_config(gc.config, settings.gate_credential_key)
         host, port = cfg["host"], int(cfg.get("port", 80))
         username, password = cfg.get("username", "admin"), cfg.get("password", "")
         relay_token = cfg.get("relay_token", "Token0")
@@ -64,7 +67,7 @@ def _fire_controller(gc: GateController) -> None:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:
             resp.read()
     else:
-        cfg = gc.config
+        cfg = decrypt_config(gc.config, settings.gate_credential_key)
         url: str = cfg["url"]
         method: str = cfg.get("method", "POST").upper()
         headers: dict = {"Content-Type": "application/json", **cfg.get("headers", {})}
@@ -78,19 +81,19 @@ def _fire_controller(gc: GateController) -> None:
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
-class GateControllerCreate(BaseModel):
+class GateControllerCreate(RequestModel):
     site_id: uuid.UUID
-    name: str
+    name: str = Field(min_length=1, max_length=255)
     kind: GateKind = GateKind.webhook
-    config: dict = {}
-    open_pulse_ms: int = 500
+    config: dict = Field(default_factory=dict)
+    open_pulse_ms: int = Field(default=500, ge=100, le=30000)
 
 
-class GateControllerPatch(BaseModel):
-    name: str | None = None
+class GateControllerPatch(RequestModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     kind: GateKind | None = None
     config: dict | None = None
-    open_pulse_ms: int | None = None
+    open_pulse_ms: int | None = Field(default=None, ge=100, le=30000)
     enabled: bool | None = None
 
 
@@ -107,18 +110,18 @@ class GateControllerOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class GateRuleCreate(BaseModel):
+class GateRuleCreate(RequestModel):
     camera_id: uuid.UUID
     gate_controller_id: uuid.UUID
     trigger_on: GateTriggerCondition = GateTriggerCondition.any_plate
     watchlist_id: uuid.UUID | None = None
-    priority: int = 0
+    priority: int = Field(default=0, ge=0, le=1000)
 
 
-class GateRulePatch(BaseModel):
+class GateRulePatch(RequestModel):
     trigger_on: GateTriggerCondition | None = None
     watchlist_id: uuid.UUID | None = None
-    priority: int | None = None
+    priority: int | None = Field(default=None, ge=0, le=1000)
     enabled: bool | None = None
 
 
@@ -155,62 +158,79 @@ def _require_admin(current_user: CurrentUser) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
 
+def _to_out(gc: GateController) -> GateControllerOut:
+    """Return GateControllerOut with sensitive config fields redacted."""
+    return GateControllerOut(
+        id=gc.id,
+        site_id=gc.site_id,
+        name=gc.name,
+        kind=gc.kind,
+        config=redact_config(gc.config),
+        open_pulse_ms=gc.open_pulse_ms,
+        enabled=gc.enabled,
+        created_at=gc.created_at,
+    )
+
+
 @router.get("/controllers", response_model=list[GateControllerOut])
 async def list_controllers(
     current_user: CurrentUser,
     db: DbSession,
     site_id: Annotated[uuid.UUID | None, Query()] = None,
-) -> list[GateController]:
+) -> list[GateControllerOut]:
     q = select(GateController)
     if site_id:
         q = q.where(GateController.site_id == site_id)
     elif current_user.role != UserRole.superadmin and current_user.site_ids:
         q = q.where(GateController.site_id.in_(current_user.site_ids))
-    return list(db.scalars(q.order_by(GateController.created_at)).all())
+    return [_to_out(gc) for gc in db.scalars(q.order_by(GateController.created_at)).all()]
 
 
 @router.post("/controllers", response_model=GateControllerOut, status_code=status.HTTP_201_CREATED)
 async def create_controller(
     body: GateControllerCreate, current_user: CurrentUser, db: DbSession
-) -> GateController:
+) -> GateControllerOut:
     _require_admin(current_user)
     gc = GateController(
         id=uuid.uuid4(),
         site_id=body.site_id,
         name=body.name,
         kind=body.kind,
-        config=body.config,
+        config=encrypt_config(body.config, settings.gate_credential_key),
         open_pulse_ms=body.open_pulse_ms,
     )
     db.add(gc)
     db.commit()
     db.refresh(gc)
-    return gc
+    return _to_out(gc)
 
 
 @router.get("/controllers/{controller_id}", response_model=GateControllerOut)
 async def get_controller(
     controller_id: uuid.UUID, current_user: CurrentUser, db: DbSession
-) -> GateController:
+) -> GateControllerOut:
     gc = db.get(GateController, controller_id)
     if gc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Controller not found")
-    return gc
+    return _to_out(gc)
 
 
 @router.patch("/controllers/{controller_id}", response_model=GateControllerOut)
 async def patch_controller(
     controller_id: uuid.UUID, body: GateControllerPatch, current_user: CurrentUser, db: DbSession
-) -> GateController:
+) -> GateControllerOut:
     _require_admin(current_user)
     gc = db.get(GateController, controller_id)
     if gc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Controller not found")
-    for field, value in body.model_dump(exclude_none=True).items():
+    patch_data = body.model_dump(exclude_none=True)
+    if "config" in patch_data:
+        patch_data["config"] = encrypt_config(patch_data["config"], settings.gate_credential_key)
+    for field, value in patch_data.items():
         setattr(gc, field, value)
     db.commit()
     db.refresh(gc)
-    return gc
+    return _to_out(gc)
 
 
 @router.delete("/controllers/{controller_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -230,7 +250,7 @@ async def manual_trigger(
     controller_id: uuid.UUID, current_user: CurrentUser, db: DbSession
 ) -> GateTriggerLog:
     """Manually open a gate — bypasses all rules."""
-    import urllib.request
+    import asyncio
 
     gc = db.get(GateController, controller_id)
     if gc is None:
@@ -241,7 +261,8 @@ async def manual_trigger(
     success = False
     error_msg = None
     try:
-        _fire_controller(gc)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _fire_controller, gc)
         success = True
     except Exception as exc:
         error_msg = str(exc)[:500]

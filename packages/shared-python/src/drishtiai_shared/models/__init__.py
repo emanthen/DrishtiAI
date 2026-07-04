@@ -13,6 +13,7 @@ from .user import User
 from .audit import AuditLog
 from .retention import RetentionPolicy
 from .webhook import Webhook, WebhookEvent
+from .refresh_token import RefreshTokenHash
 
 __all__ = [
     "Organization",
@@ -34,4 +35,5 @@ __all__ = [
     "RetentionPolicy",
     "Webhook",
     "WebhookEvent",
+    "RefreshTokenHash",
 ]
