@@ -4,25 +4,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth";
 import { api, type VehicleDetail } from "@/lib/api";
+import { ColorSwatch } from "@/components/ui/color-swatch";
 import { formatTs, relativeTime } from "@/lib/utils";
-
-const COLOR_HEX: Record<string, string> = {
-  white: "#f5f5f5", black: "#1a1a1a", silver: "#c0c0c0", grey: "#808080",
-  red: "#dc2626", blue: "#2563eb", green: "#16a34a", yellow: "#ca8a04",
-  orange: "#ea580c", brown: "#92400e", maroon: "#881337", other: "#6b7280",
-};
-
-function ColorSwatch({ color }: { color: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="w-3 h-3 rounded-full border border-hairline dark:border-hairline-dark shrink-0"
-        style={{ backgroundColor: COLOR_HEX[color] ?? "#6b7280" }}
-      />
-      <span className="capitalize text-xs text-steel">{color}</span>
-    </span>
-  );
-}
 
 const VEHICLE_COLORS = [
   "white","black","silver","grey","red","blue","green","yellow","orange","brown","maroon","other"
