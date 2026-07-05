@@ -64,6 +64,14 @@ licenses: ## Generate LICENSES.md (requires pip-licenses and license-checker)
 	uv run pip-licenses --format=markdown --output-file=LICENSES.md
 	@echo "Python licenses written to LICENSES.md"
 
+keygen: ## Generate RS256 JWT keypair — run once at install, add output to .env
+	uv run python apps/api/scripts/generate_jwt_keys.py
+
+security-scan: ## Run local security checks (Bandit SAST + pip-audit + pnpm audit)
+	uv run bandit -r apps/api/src apps/pipeline/src apps/worker/src -q
+	uv run pip-audit --desc
+	pnpm --recursive audit --prod
+
 backup: ## Create a full backup bundle
 	$(COMPOSE) exec postgres pg_dump -U drishtiai drishtiai > deploy/backups/postgres_$$(date +%Y%m%d_%H%M%S).sql
 	@echo "Backup complete."

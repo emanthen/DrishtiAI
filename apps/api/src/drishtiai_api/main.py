@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -9,10 +10,14 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from drishtiai_api.limiter import limiter
+from drishtiai_api.log_filter import RedactingFilter
 
 from .config import settings
-from .routers import analytics, audit, auth, cameras, events, gates, health, notifications, parking, reports, sites, system, tariffs, users, visitor_passes, watchlists, alerts, ws, webhooks
+from .routers import analytics, audit, auth, cameras, events, gates, health, mfa, notifications, parking, reports, sites, system, tariffs, users, visitor_passes, watchlists, alerts, ws, webhooks
 from .routers import stream
+
+# Attach redacting filter to the root logger so no handler leaks secrets.
+logging.getLogger().addFilter(RedactingFilter())
 
 
 @asynccontextmanager
@@ -43,6 +48,7 @@ app.add_middleware(
 
 app.include_router(health.router, tags=["health"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(mfa.router, prefix="/auth/mfa", tags=["auth"])
 app.include_router(sites.router, prefix="/sites", tags=["sites"])
 app.include_router(cameras.router, prefix="/cameras", tags=["cameras"])
 app.include_router(events.router, prefix="/events", tags=["events"])

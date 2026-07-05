@@ -10,6 +10,8 @@ export default function LoginPage() {
   const { setTokens, setUser } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [showTotp, setShowTotp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,13 +20,14 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const tokens = await api.auth.login(email, password);
+      const tokens = await api.auth.login(email, password, showTotp ? totpCode : undefined);
       setTokens(tokens.access_token, tokens.refresh_token);
       const user = await api.auth.me(tokens.access_token);
       setUser(user);
       router.push("/");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : "Login failed";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -68,6 +71,35 @@ export default function LoginPage() {
               autoComplete="current-password"
             />
           </div>
+
+          {/* TOTP field — shown when user toggles or after an auth failure hint */}
+          {showTotp ? (
+            <div>
+              <label className="block text-xs font-medium text-steel mb-1" htmlFor="totp">
+                Authenticator code
+              </label>
+              <input
+                id="totp"
+                type="text"
+                inputMode="numeric"
+                pattern="\d{6}"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000"
+                className="w-full rounded-[4px] border border-hairline bg-white dark:bg-ink dark:border-hairline-dark px-3 py-2 text-sm font-mono text-ink dark:text-bone tracking-widest focus:outline-none focus:ring-1 focus:ring-signal"
+                autoComplete="one-time-code"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowTotp(true)}
+              className="text-xs text-steel hover:text-ink dark:hover:text-bone transition-colors"
+            >
+              Using an authenticator? Enter code
+            </button>
+          )}
 
           {error && (
             <p className="text-sm text-alert" role="alert">

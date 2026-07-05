@@ -20,6 +20,8 @@ dependencies = [
     "minio>=7.2.8",
     "reportlab>=4.2.0",
     "prometheus-fastapi-instrumentator>=7.0.0",
+    "prometheus-client>=0.20.0",
+    "pyotp>=2.9.0",
     "drishtiai-shared",
 ]
 
@@ -30,6 +32,8 @@ dev = [
     "httpx>=0.27.0",
     "ruff>=0.6.0",
     "mypy>=1.11.0",
+    "bandit>=1.7.9",
+    "pip-audit>=2.7.0",
 ]
 
 [tool.uv.sources]

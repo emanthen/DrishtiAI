@@ -43,10 +43,10 @@ export { ApiError };
 
 export const api = {
   auth: {
-    login: (email: string, password: string) =>
+    login: (email: string, password: string, totp_code?: string) =>
       request<{ access_token: string; refresh_token: string; token_type: string }>(
         "/auth/login",
-        { method: "POST", body: JSON.stringify({ email, password }) },
+        { method: "POST", body: JSON.stringify({ email, password, ...(totp_code ? { totp_code } : {}) }) },
       ),
     me: (token: string) =>
       request<{ id: string; email: string; name: string; role: string }>(

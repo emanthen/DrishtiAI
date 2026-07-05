@@ -1,12 +1,33 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+from jose import JWTError, jwt  # noqa: F401 (JWTError re-exported for callers)
 
 from drishtiai_api.config import settings
 
 ACCESS_TOKEN_TYPE = "access"
 REFRESH_TOKEN_TYPE = "refresh"
+_ALGORITHM = "RS256"
+
+
+def _private_key() -> str:
+    key = settings.jwt_private_key_pem
+    if not key:
+        raise RuntimeError(
+            "JWT_PRIVATE_KEY_PEM is not set. Run 'make keygen' to generate a keypair "
+            "and add the result to your .env file."
+        )
+    return key
+
+
+def _public_key() -> str:
+    key = settings.jwt_public_key_pem
+    if not key:
+        raise RuntimeError(
+            "JWT_PUBLIC_KEY_PEM is not set. Run 'make keygen' to generate a keypair "
+            "and add the result to your .env file."
+        )
+    return key
 
 
 def _now() -> datetime:
@@ -22,7 +43,7 @@ def create_access_token(user_id: str, role: str) -> str:
         "exp": expire,
         "jti": str(uuid.uuid4()),
     }
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, _private_key(), algorithm=_ALGORITHM)
 
 
 def create_refresh_token(user_id: str) -> str:
@@ -33,9 +54,9 @@ def create_refresh_token(user_id: str) -> str:
         "exp": expire,
         "jti": str(uuid.uuid4()),
     }
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, _private_key(), algorithm=_ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
     """Decode and verify a token. Raises JWTError on failure."""
-    return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    return jwt.decode(token, _public_key(), algorithms=[_ALGORITHM])

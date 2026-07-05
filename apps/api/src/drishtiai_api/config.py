@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +19,13 @@ class Settings(BaseSettings):
     minio_bucket_snapshots: str = "snapshots"
     minio_bucket_clips: str = "clips"
 
-    jwt_algorithm: str = "HS256"
+    # RS256 JWT keys — PEM-encoded strings.
+    # Generate with: make keygen
+    # In .env, use the single-line form output by generate_jwt_keys.py
+    # (backslash-n literal in the value is normalised to real newlines below).
+    jwt_private_key_pem: str = ""
+    jwt_public_key_pem: str = ""
+
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
 
@@ -31,6 +38,12 @@ class Settings(BaseSettings):
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # Leave empty in dev — credentials stored plaintext with a warning.
     gate_credential_key: str = ""
+
+    @field_validator("jwt_private_key_pem", "jwt_public_key_pem", mode="before")
+    @classmethod
+    def _normalise_pem(cls, v: str) -> str:
+        # Handle both quoted multi-line PEM and single-line with literal \n
+        return v.replace("\\n", "\n") if isinstance(v, str) else v
 
 
 settings = Settings()

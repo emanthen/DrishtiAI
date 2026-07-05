@@ -27,6 +27,7 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
     db: DbSession,
     redis: RedisClient,
+    request: Request,
 ) -> User:
     token = credentials.credentials
     try:
@@ -45,6 +46,10 @@ async def get_current_user(
     user = db.get(User, uuid.UUID(user_id))
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    # Store for use by logout (access token denylist).
+    request.state.token_jti = jti
+    request.state.token_exp = payload.get("exp", 0)
 
     return user
 

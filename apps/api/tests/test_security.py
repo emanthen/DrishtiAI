@@ -217,3 +217,174 @@ def test_gate_creds_no_key_is_passthrough() -> None:
     config = {"password": "pw", "host": "x"}
     assert encrypt_config(config, "") == config
     assert decrypt_config(config, "") == config
+
+
+# ── RS256 JWT ──────────────────────────────────────────────────────────────────
+
+def test_rs256_token_roundtrip() -> None:
+    """Access token must be verifiable with the public key only."""
+    from drishtiai_api.auth.tokens import create_access_token, decode_token, ACCESS_TOKEN_TYPE
+
+    token = create_access_token("test-uid", "guard")
+    payload = decode_token(token)
+    assert payload["sub"] == "test-uid"
+    assert payload["role"] == "guard"
+    assert payload["type"] == ACCESS_TOKEN_TYPE
+    assert "jti" in payload
+
+
+def test_rs256_tampered_token_rejected() -> None:
+    """A token with a modified payload must be rejected by decode_token."""
+    import base64, json
+    from jose import JWTError
+    from drishtiai_api.auth.tokens import create_access_token, decode_token
+
+    token = create_access_token("uid", "guard")
+    parts = token.split(".")
+    # Decode payload, escalate role, re-encode (without re-signing).
+    padding = 4 - len(parts[1]) % 4
+    payload_bytes = base64.urlsafe_b64decode(parts[1] + "=" * padding)
+    payload = json.loads(payload_bytes)
+    payload["role"] = "superadmin"
+    tampered_payload = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    tampered_token = f"{parts[0]}.{tampered_payload}.{parts[2]}"
+
+    with pytest.raises(JWTError):
+        decode_token(tampered_token)
+
+
+# ── TOTP helpers ───────────────────────────────────────────────────────────────
+
+def test_totp_generate_secret_is_base32() -> None:
+    from drishtiai_api.auth.totp import generate_secret
+    import base64
+
+    secret = generate_secret()
+    assert len(secret) >= 16
+    # Must be valid base32 — decode should not raise.
+    base64.b32decode(secret)
+
+
+def test_totp_verify_valid_code() -> None:
+    import pyotp
+    from drishtiai_api.auth.totp import verify_code
+
+    secret = pyotp.random_base32()
+    code = pyotp.TOTP(secret).now()
+    assert verify_code(secret, code) is True
+
+
+def test_totp_verify_invalid_code() -> None:
+    from drishtiai_api.auth.totp import generate_secret, verify_code
+
+    secret = generate_secret()
+    assert verify_code(secret, "000000") is False
+
+
+def test_totp_provisioning_uri_contains_issuer() -> None:
+    from drishtiai_api.auth.totp import generate_secret, get_provisioning_uri
+
+    secret = generate_secret()
+    uri = get_provisioning_uri(secret, "user@test.com")
+    assert "DrishtiAI" in uri
+    assert "user%40test.com" in uri or "user@test.com" in uri
+
+
+# ── Progressive lockout ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_lockout_not_locked_initially() -> None:
+    from unittest.mock import AsyncMock
+    from drishtiai_api.auth.lockout import is_locked
+
+    redis = AsyncMock()
+    redis.exists.return_value = 0
+    assert await is_locked(redis, "user-123") is False
+
+
+@pytest.mark.asyncio
+async def test_lockout_5_failures_triggers_5min_lock() -> None:
+    from unittest.mock import AsyncMock, call
+    from drishtiai_api.auth.lockout import on_login_failure
+
+    redis = AsyncMock()
+    redis.incr.return_value = 5  # simulate 5th failure
+    await on_login_failure(redis, "user-123")
+
+    # setex must be called with 300s (5-min lock)
+    redis.setex.assert_called_once_with("auth:lock:user-123", 300, "1")
+
+
+@pytest.mark.asyncio
+async def test_lockout_10_failures_triggers_30min_lock() -> None:
+    from unittest.mock import AsyncMock
+    from drishtiai_api.auth.lockout import on_login_failure
+
+    redis = AsyncMock()
+    redis.incr.return_value = 10
+    await on_login_failure(redis, "user-123")
+    redis.setex.assert_called_once_with("auth:lock:user-123", 1800, "1")
+
+
+@pytest.mark.asyncio
+async def test_lockout_20_failures_triggers_24h_lock() -> None:
+    from unittest.mock import AsyncMock
+    from drishtiai_api.auth.lockout import on_login_failure
+
+    redis = AsyncMock()
+    redis.incr.return_value = 20
+    await on_login_failure(redis, "user-123")
+    redis.setex.assert_called_once_with("auth:lock:user-123", 86400, "1")
+
+
+@pytest.mark.asyncio
+async def test_lockout_clears_on_success() -> None:
+    from unittest.mock import AsyncMock
+    from drishtiai_api.auth.lockout import on_login_success
+
+    redis = AsyncMock()
+    await on_login_success(redis, "user-123")
+    redis.delete.assert_called_once_with("auth:fail:user-123", "auth:lock:user-123")
+
+
+# ── Logging redaction ──────────────────────────────────────────────────────────
+
+def test_log_filter_redacts_password_in_message() -> None:
+    import logging
+    from drishtiai_api.log_filter import RedactingFilter
+
+    filt = RedactingFilter()
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0,
+        msg="User login password=mysecret123 failed", args=(), exc_info=None,
+    )
+    filt.filter(record)
+    assert "mysecret123" not in record.msg
+    assert "***" in record.msg
+
+
+def test_log_filter_redacts_sensitive_dict_args() -> None:
+    import logging
+    from drishtiai_api.log_filter import RedactingFilter
+
+    filt = RedactingFilter()
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0,
+        msg="Request body: %s", args=({"password": "s3cr3t", "email": "a@b.com"},), exc_info=None,
+    )
+    filt.filter(record)
+    assert isinstance(record.args, tuple)
+    assert record.args[0]["password"] == "***"
+    assert record.args[0]["email"] == "a@b.com"
+
+
+# ── docker-compose default credentials ────────────────────────────────────────
+
+def test_no_grafana_default_credential_in_compose() -> None:
+    """GF_SECURITY_ADMIN_PASSWORD must not have a :-admin fallback."""
+    import pathlib
+
+    compose = pathlib.Path("deploy/compose/docker-compose.yml").read_text()
+    assert ":-admin" not in compose, (
+        "docker-compose.yml contains ':-admin' default credential for Grafana — remove it"
+    )
