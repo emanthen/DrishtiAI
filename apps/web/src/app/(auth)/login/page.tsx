@@ -50,6 +50,7 @@ export default function LoginPage() {
               id="email"
               type="email"
               required
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-[4px] border border-hairline bg-white dark:bg-ink dark:border-hairline-dark px-3 py-2 text-sm text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal"
@@ -115,6 +116,13 @@ export default function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-[11px] text-steel">
+          Demo:{" "}
+          <span className="font-mono">admin@drishtiai.local</span>
+          {" / "}
+          <span className="font-mono">devpassword123</span>
+        </p>
       </div>
     </main>
   );
