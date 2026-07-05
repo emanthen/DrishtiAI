@@ -1,0 +1,7 @@
+# NEVER commit the private signing key.
+# Only the public key (public_key.pem) ships in the product.
+# Generate the production keypair offline and store it only on the license server.
+#   openssl genpkey -algorithm Ed25519 -out private_key.pem
+#   openssl pkey -in private_key.pem -pubout -out public_key.pem
+private_key.pem
+*.key

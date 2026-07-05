@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geography
-from sqlalchemy import String, DateTime, ForeignKey, func
+from sqlalchemy import Boolean, String, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,11 @@ class Site(Base):
     geo = mapped_column(Geography(geometry_type="POINT", srid=4326), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kathmandu")
     plate_region: Mapped[str] = mapped_column(String(10), default="NP")
+    # License-gate behaviour when automation stops due to expiry.
+    # "manual": barrier stays in its current position (most sites use physical override).
+    # "freeflow": barrier is pulsed open (parking exits, accessible entrances).
+    gate_expiry_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    record_on_expiry: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

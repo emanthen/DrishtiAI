@@ -173,6 +173,16 @@ def main() -> None:
         "DrishtiAI pipeline starting (Phase 2 — GStreamer/OpenCV + PaddleOCR + voter + alert engine)"
     )
 
+    try:
+        import drishtiai_licensing.enforcement as enf
+        state, message = enf.initialize()
+        if state.value in ("expired", "hardware_mismatch", "invalid"):
+            logger.warning("LICENSE %s: %s — gate automation suspended", state.value.upper(), message)
+        else:
+            logger.info("LICENSE %s: %s", state.value.upper(), message)
+    except ImportError:
+        logger.warning("drishtiai-licensing not installed — license enforcement disabled")
+
     db = SessionLocal()
     try:
         q = select(Camera).where(Camera.enabled == True)  # noqa: E712
