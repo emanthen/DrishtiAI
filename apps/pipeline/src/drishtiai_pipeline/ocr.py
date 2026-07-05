@@ -60,11 +60,15 @@ def _get_ocr():
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-_MIN_ASPECT = 1.5      # width / height
-_MAX_ASPECT = 8.0
-_MIN_AREA   = 800      # pixels²
-_PAD        = 8        # pixels of padding added around each candidate crop
-_MIN_CROP_H = 32       # PaddleOCR works best when text height ≥ 32 px
+# Lowered from 1.5 to 0.8 to capture two-row motorcycle plates (nearly square).
+# Single-row candidates still dominate; two-row detection path runs only for
+# aspect ratios below _MOTO_ASPECT_MAX.
+_MIN_ASPECT       = 0.8   # width / height — was 1.5
+_MAX_ASPECT       = 8.0
+_MOTO_ASPECT_MAX  = 1.5   # below this aspect ratio → attempt two-row split first
+_MIN_AREA         = 800   # pixels²
+_PAD              = 8     # pixels of padding added around each candidate crop
+_MIN_CROP_H       = 32    # PaddleOCR works best when text height ≥ 32 px
 
 # Broad alphanumeric pattern: 3–13 chars, starts + ends with alnum
 _PLATE_RE = re.compile(r"^[A-Z0-9][A-Z0-9]{1,11}[A-Z0-9]$")
@@ -224,6 +228,86 @@ class PlateDetection:
     confidence: float
     bbox: list[list[float]]   # [[x1,y1],[x2,y1],[x2,y2],[x1,y2]] in frame coords
     crop: np.ndarray           # BGR crop of the plate region (pre-processed)
+    sharpness: float = 0.0    # Laplacian variance — higher = sharper frame
+
+
+def _measure_sharpness(img: np.ndarray) -> float:
+    """Laplacian variance as a proxy for focus quality."""
+    if img is None or img.size == 0:
+        return 0.0
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+
+def _raw_ocr_text(image: np.ndarray) -> tuple[str, float] | None:
+    """Run PaddleOCR; return (cleaned_text, confidence) for the highest-confidence line.
+
+    No plate-RE filtering — used for individual rows of a two-row motorcycle crop.
+    """
+    if image is None or image.size == 0:
+        return None
+    ocr = _get_ocr()
+    try:
+        results = ocr.ocr(image, cls=True)
+    except Exception:
+        return None
+    if not results or results[0] is None:
+        return None
+    best = max(
+        (line for line in results[0] if line is not None),
+        key=lambda l: l[1][1],
+        default=None,
+    )
+    if best is None:
+        return None
+    text, conf = best[1]
+    clean = text.upper().replace(" ", "").replace(".", "").replace("-", "")
+    return clean, float(conf)
+
+
+def _try_two_row(crop: np.ndarray, offset_x: int, offset_y: int) -> PlateDetection | None:
+    """Split a near-square crop horizontally and combine the two OCR rows.
+
+    Nepal motorcycle plates have two rows (e.g. top="BA1PA", bottom="0001").
+    Single-row OCR on the full crop usually fails; splitting succeeds because
+    each row has a sensible text-height-to-width ratio.
+    """
+    h, w = crop.shape[:2]
+    if h < 20 or w < 20:
+        return None
+
+    mid = h // 2
+    top_proc = _preprocess_crop(crop[:mid, :])
+    bot_proc = _preprocess_crop(crop[mid:, :])
+
+    top = _raw_ocr_text(top_proc)
+    bot = _raw_ocr_text(bot_proc)
+
+    if top is None or bot is None:
+        return None
+
+    combined = _correct_chars(top[0] + bot[0])
+    normalised = _normalize_np_plate(combined)
+    if normalised is None:
+        return None
+
+    avg_conf = (top[1] + bot[1]) / 2.0
+    if avg_conf < 0.30:
+        return None
+
+    bbox = [
+        [offset_x, offset_y],
+        [offset_x + w, offset_y],
+        [offset_x + w, offset_y + h],
+        [offset_x, offset_y + h],
+    ]
+    return PlateDetection(
+        text=normalised,
+        confidence=round(avg_conf, 4),
+        bbox=bbox,
+        crop=crop,
+        sharpness=_measure_sharpness(crop),
+    )
 
 
 def _run_ocr_on_image(
@@ -292,6 +376,7 @@ def _run_ocr_on_image(
             confidence=float(confidence),
             bbox=frame_bbox,
             crop=crop,
+            sharpness=_measure_sharpness(crop),
         ))
 
     return plates
@@ -315,6 +400,18 @@ def detect_plates(frame_bgr: np.ndarray) -> list[PlateDetection]:
             crop = frame_bgr[y1:y2, x1:x2]
             if crop.size == 0:
                 continue
+
+            crop_h, crop_w = crop.shape[:2]
+            aspect = crop_w / max(crop_h, 1)
+
+            # Near-square crop → likely a two-row motorcycle plate.
+            # Try two-row split first; fall through to single-row OCR as fallback.
+            if aspect < _MOTO_ASPECT_MAX:
+                moto = _try_two_row(crop, offset_x=x1, offset_y=y1)
+                if moto is not None:
+                    results.append(moto)
+                    continue  # don't also run single-row on this candidate
+
             processed = _preprocess_crop(crop) if settings.pipeline_ocr_preprocess else crop
             found = _run_ocr_on_image(processed, offset_x=x1, offset_y=y1)
             results.extend(found)

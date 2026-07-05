@@ -30,24 +30,25 @@ class _Track:
 
     def consensus(self) -> PlateDetection:
         """
-        Confidence-weighted vote: winner = text with highest (count × avg_confidence).
+        Confidence²-weighted vote: winner = text with highest Σ(confidence²).
 
-        Pure majority voting fails when a correct high-confidence reading appears
-        fewer times than an incorrect low-confidence reading.  Weighting by
-        cumulative confidence favours quality over quantity.
+        Squaring the confidence disproportionately rewards high-confidence reads,
+        so a single sharp correct read beats several noisy low-confidence misreads.
+        The reported output confidence remains a linear average for interpretability.
         """
-        # Accumulate total confidence and best detection per candidate text
-        weight: dict[str, float] = {}
+        weight: dict[str, float] = {}   # conf² sum — used for winner selection
+        conf_sum: dict[str, float] = {} # linear conf sum — used for reported value
         best_det: dict[str, PlateDetection] = {}
 
         for d in self.reads:
-            weight[d.text] = weight.get(d.text, 0.0) + d.confidence
+            weight[d.text] = weight.get(d.text, 0.0) + d.confidence ** 2
+            conf_sum[d.text] = conf_sum.get(d.text, 0.0) + d.confidence
             if d.text not in best_det or d.confidence > best_det[d.text].confidence:
                 best_det[d.text] = d
 
         winner_text = max(weight, key=weight.__getitem__)
         winner_reads = [d for d in self.reads if d.text == winner_text]
-        avg_conf = weight[winner_text] / len(winner_reads)
+        avg_conf = conf_sum[winner_text] / len(winner_reads)
 
         w = best_det[winner_text]
         return PlateDetection(
@@ -55,6 +56,7 @@ class _Track:
             confidence=round(avg_conf, 4),
             bbox=w.bbox,
             crop=w.crop,
+            sharpness=w.sharpness,
         )
 
 

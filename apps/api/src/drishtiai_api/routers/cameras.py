@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func
 
-from drishtiai_shared.models.camera import Camera, CameraKind, CameraRole, HealthStatus
+from drishtiai_shared.models.camera import Camera, CameraKind, CameraRole, HealthStatus, PlateRegion
 from drishtiai_shared.models.user import UserRole
 from drishtiai_api.deps import CurrentUser, DbSession, RedisClient, require_role
 from drishtiai_api.schemas import RequestModel
@@ -23,6 +23,7 @@ class CameraCreate(RequestModel):
     kind: CameraKind = CameraKind.ip
     stream_url: str | None = Field(default=None, max_length=2048)
     role: CameraRole = CameraRole.general
+    plate_region: PlateRegion = PlateRegion.auto
     resolution_w: int | None = Field(default=None, ge=1, le=15360)
     resolution_h: int | None = Field(default=None, ge=1, le=8640)
     fps: float | None = Field(default=None, gt=0, le=120)
@@ -44,6 +45,7 @@ class CameraPatch(RequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     stream_url: str | None = Field(default=None, max_length=2048)
     role: CameraRole | None = None
+    plate_region: PlateRegion | None = None
     enabled: bool | None = None
 
     @field_validator("name")
@@ -66,6 +68,7 @@ class CameraOut(BaseModel):
     kind: CameraKind
     stream_url: str | None
     role: CameraRole
+    plate_region: PlateRegion
     health_status: HealthStatus
     enabled: bool
     fps: float | None
@@ -119,6 +122,7 @@ async def add_camera(
         kind=body.kind,
         stream_url=body.stream_url,
         role=body.role,
+        plate_region=body.plate_region,
         resolution_w=body.resolution_w,
         resolution_h=body.resolution_h,
         fps=body.fps,

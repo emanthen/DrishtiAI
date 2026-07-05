@@ -21,8 +21,14 @@ class PipelineSettings(BaseSettings):
     # Frame sampling: process 1 out of every N frames
     pipeline_frame_sample: int = 5
 
-    # Minimum PaddleOCR confidence to emit a plate_read event
+    # Absolute floor — reads below this are discarded entirely
+    pipeline_min_confidence: float = 0.40
+
+    # Reads between min_confidence and this threshold go to the review queue
     pipeline_ocr_confidence_threshold: float = 0.70
+
+    # Route low-confidence reads to review_queue table (the training data flywheel)
+    pipeline_review_queue_enabled: bool = True
 
     # Deduplicate: suppress repeated reads of the same plate within N seconds
     pipeline_dedup_seconds: int = 5
