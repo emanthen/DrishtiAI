@@ -111,6 +111,21 @@ export const api = {
       }),
   },
 
+  plates: {
+    search: (token: string, q: string, siteId?: string, limit = 20) =>
+      request<PlateSearchResult[]>(
+        `/plates/search?q=${encodeURIComponent(q)}&limit=${limit}${siteId ? `&site_id=${siteId}` : ""}`,
+        { token },
+      ),
+    timeline: (token: string, plateId: string, days = 30, limit = 100, cursor?: string) => {
+      const p = new URLSearchParams({ days: String(days), limit: String(limit) });
+      if (cursor) p.set("cursor", cursor);
+      return request<PlateTimeline>(`/plates/${plateId}/timeline?${p}`, { token });
+    },
+    cameraSightings: (token: string, plateId: string, days = 30) =>
+      request<CameraSighting[]>(`/plates/${plateId}/camera-sightings?days=${days}`, { token }),
+  },
+
   vehicles: {
     list: (token: string, params: VehiclesParams = {}) => {
       const q = new URLSearchParams();
@@ -482,6 +497,44 @@ export interface CameraActivityRow {
   name: string;
   reads: number;
   last_event: string | null;
+}
+
+export interface VehicleBadge {
+  id: string;
+  color: string | null;
+  type: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+export interface PlateSearchResult {
+  id: string;
+  text: string;
+  format_class: string;
+  vehicle: VehicleBadge | null;
+}
+
+export interface TimelineEvent {
+  id: string;
+  ts: string;
+  kind: string;
+  confidence: number | null;
+  camera_id: string;
+  camera_name: string | null;
+  snapshot_key: string | null;
+}
+
+export interface PlateTimeline {
+  items: TimelineEvent[];
+  next_cursor: string | null;
+}
+
+export interface CameraSighting {
+  camera_id: string;
+  name: string;
+  count: number;
+  first_seen: string;
+  last_seen: string;
 }
 
 export interface VisitorPass {
