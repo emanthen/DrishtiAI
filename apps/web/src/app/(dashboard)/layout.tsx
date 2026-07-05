@@ -69,6 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <NavItem href="/webhooks" label="Webhooks" />
           <NavItem href="/audit" label="Audit log" />
           <NavItem href="/reports" label="Reports" />
+          <NavItem href="/system" label="System" />
         </div>
 
         <div className="px-4 py-3 border-t border-hairline dark:border-hairline-dark">
