@@ -16,16 +16,21 @@ Turns every camera on your site into a vehicle sensor — reading plates, loggin
 | Capability | Description |
 |---|---|
 | **ANPR** | Two-stage OCR: OpenCV plate localisation → PaddleOCR on crops; confidence-weighted multi-frame voter |
+| **Nepali plate normalisation** | Province-code prefix detection, zero-padded canonical form, two-row motorcycle plate handling |
+| **Vehicle intelligence** | Vehicle color and type classification; `/vehicles` search with plate/color/type filters |
+| **Review queue** | Low-confidence detections routed to human review flywheel (`/review-queue`) |
 | **Parking management** | Entry/exit session tracking, tiered tariff engine, NPR billing, manual close/waive |
-| **Gate control** | Webhook and ONVIF relay drivers; per-camera rules (any plate / watchlist / visitor pass) |
+| **Gate control** | Webhook and ONVIF relay drivers; per-camera rules (any plate / watchlist / visitor pass); license-gated |
 | **Alert engine** | Exact, prefix, and fuzzy plate matching against categorised watchlists (blocked / VIP / resident…) |
 | **Visitor passes** | Time-bounded passes with single-use enforcement; cancel = immediate gate lockout |
+| **Investigation** | pg_trgm fuzzy plate search; per-plate timeline + per-camera sighting history |
 | **User management** | Role hierarchy (superadmin → site_admin → manager → guard → resident → auditor); per-site scoping |
 | **Reports & exports** | CSV and PDF reports via API; async large-export tasks via Celery |
 | **Audit log** | Append-only `audit_logs` table; every auth and admin action recorded with actor, IP, and metadata |
 | **Webhooks** | Outbound HTTP callbacks with HMAC-SHA256 signing for 7 event types |
 | **Mobile app** | Expo React Native: live stats, alerts, visitor passes, push notifications |
 | **Observability** | Prometheus + Grafana + Loki; auto-provisioned DrishtiAI Ops dashboard |
+| **Licensing** | Ed25519 hardware-locked node-lock tokens; offline expiry; degrade-don't-brick gate safety; operator CLI |
 
 ---
 
@@ -79,10 +84,12 @@ apps/
   pipeline/     GStreamer/OpenCV pipeline, OCR, voter, alert engine
   web/          Next.js 15 operator dashboard
   mobile/       Expo React Native mobile app
+  licensing/    Operator CLI entry point (delegates to packages/licensing)
 packages/
   shared-python/  SQLAlchemy models, Alembic migrations, shared config
   shared-ts/      TypeScript types shared between web + mobile
   ui/             Design tokens (colours, typography, spacing)
+  licensing/      drishtiai-licensing: Ed25519 token, fingerprint, enforcement, clock guard
 ml/
   benchmarks/   Synthetic test video generator, Phase 1 + Phase 11 evaluators
   models/       Model weights (gitignored), fine-tuning scripts
@@ -171,7 +178,7 @@ See [`.env.example`](.env.example) for the full annotated reference. Key variabl
 | `PIPELINE_OCR_USE_GPU` | No | Enable GPU inference for PaddleOCR (default: `false`) |
 | `PIPELINE_OCR_TWO_STAGE` | No | Two-stage plate localisation (default: `true`) |
 | `PIPELINE_CAPTURE_BACKEND` | No | `gstreamer` or `opencv` (default: `gstreamer`) |
-| `GRAFANA_PASSWORD` | No | Grafana admin password (default: `admin`) |
+| `GRAFANA_PASSWORD` | Yes | Grafana admin password. Generate with `make keygen`. `admin` is rejected at startup. |
 
 ---
 
@@ -182,7 +189,7 @@ See [`.env.example`](.env.example) for the full annotated reference. Key variabl
 docker compose -f deploy/compose/docker-compose.yml --profile observability up
 ```
 
-The `DrishtiAI Ops` Grafana dashboard is provisioned automatically. Open http://localhost:3001 (default credentials: `admin` / `admin`).
+The `DrishtiAI Ops` Grafana dashboard is provisioned automatically. Open http://localhost:3001. Log in with username `admin` and the `GRAFANA_PASSWORD` you set in `.env` (run `make keygen` to generate one).
 
 ---
 
@@ -206,9 +213,12 @@ Core resource groups:
 
 | Prefix | Description |
 |---|---|
-| `/auth` | Login, refresh, logout, me |
+| `/auth` | Login, refresh, logout, me, TOTP MFA setup/verify |
 | `/cameras` | Camera CRUD, live-status, health-summary |
 | `/events` | Plate read events, snapshot/clip retrieval |
+| `/plates` | pg_trgm fuzzy search, per-plate timeline, camera sightings |
+| `/vehicles` | Vehicle search with plate/color/type filters |
+| `/review-queue` | Low-confidence detection review; approve/reject |
 | `/alerts` | Alert list, ack/snooze/resolve |
 | `/watchlists` | Watchlist CRUD, plate entry management |
 | `/parking-sessions` | Session lifecycle, tariff management |
@@ -218,9 +228,10 @@ Core resource groups:
 | `/webhooks` | Outbound webhook registration, test ping |
 | `/audit-logs` | Append-only audit trail |
 | `/reports` | CSV + PDF report generation |
-| `/analytics` | Stat cards, hourly/daily charts |
+| `/analytics` | Stat cards, hourly/daily/occupancy charts, top plates |
 | `/notifications` | Expo push token register/unregister |
 | `/system/health` | Live system health (Postgres, Redis, MinIO, pipeline) |
+| `/system/license` | Current license state, expiry banner data |
 | `/metrics` | Prometheus metrics endpoint |
 
 ---
