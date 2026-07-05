@@ -129,19 +129,19 @@ export default function WatchlistsPage() {
             <h2 className="text-sm font-medium mb-3 text-ink dark:text-bone">New Watchlist</h2>
             <div className="space-y-2">
               <input
-                className="w-full input-field text-sm"
+                className="w-full rounded-[4px] border border-hairline dark:border-hairline-dark bg-white dark:bg-ink px-3 py-2 text-sm text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal"
                 placeholder="Name (e.g. Blocked vehicles)"
                 value={wlName}
                 onChange={(e) => setWlName(e.target.value)}
               />
               <input
-                className="w-full input-field text-sm"
+                className="w-full rounded-[4px] border border-hairline dark:border-hairline-dark bg-white dark:bg-ink px-3 py-2 text-sm text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal"
                 placeholder="Site ID (UUID)"
                 value={wlSiteId}
                 onChange={(e) => setWlSiteId(e.target.value)}
               />
               <select
-                className="w-full input-field text-sm"
+                className="w-full rounded-[4px] border border-hairline dark:border-hairline-dark bg-white dark:bg-ink px-3 py-2 text-sm text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal cursor-pointer"
                 value={wlCategory}
                 onChange={(e) => setWlCategory(e.target.value as Watchlist["category"])}
               >
@@ -150,8 +150,8 @@ export default function WatchlistsPage() {
                 ))}
               </select>
               <div className="flex gap-2">
-                <button onClick={createWatchlist} className="btn-primary text-sm px-3 py-1.5">Create</button>
-                <button onClick={() => setShowCreate(false)} className="btn-ghost text-sm px-3 py-1.5">Cancel</button>
+                <button onClick={createWatchlist} className="rounded-[4px] bg-signal text-white text-sm px-3 py-1.5 hover:bg-signal/90 transition-colors">Create</button>
+                <button onClick={() => setShowCreate(false)} className="rounded-[4px] border border-hairline dark:border-hairline-dark text-steel text-sm px-3 py-1.5 hover:text-ink dark:hover:text-bone transition-colors">Cancel</button>
               </div>
             </div>
           </div>
@@ -177,14 +177,14 @@ export default function WatchlistsPage() {
             {/* Entry form */}
             <div className="flex gap-2 mb-4 flex-wrap">
               <input
-                className="input-field text-sm w-36"
+                className="w-36 rounded-[4px] border border-hairline dark:border-hairline-dark bg-white dark:bg-ink px-3 py-2 text-sm font-mono text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal"
                 placeholder="Plate text"
                 value={entryText}
                 onChange={(e) => setEntryText(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === "Enter" && addEntry()}
               />
               <select
-                className="input-field text-sm"
+                className="rounded-[4px] border border-hairline dark:border-hairline-dark bg-white dark:bg-ink px-3 py-2 text-sm text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal cursor-pointer"
                 value={entryPattern}
                 onChange={(e) => setEntryPattern(e.target.value as typeof entryPattern)}
               >
@@ -193,12 +193,12 @@ export default function WatchlistsPage() {
                 <option value="fuzzy">Fuzzy</option>
               </select>
               <input
-                className="input-field text-sm flex-1 min-w-[120px]"
+                className="flex-1 min-w-[120px] rounded-[4px] border border-hairline dark:border-hairline-dark bg-white dark:bg-ink px-3 py-2 text-sm text-ink dark:text-bone focus:outline-none focus:ring-1 focus:ring-signal"
                 placeholder="Notes (optional)"
                 value={entryNotes}
                 onChange={(e) => setEntryNotes(e.target.value)}
               />
-              <button onClick={addEntry} className="btn-primary text-sm px-3 py-1.5 shrink-0">
+              <button onClick={addEntry} className="shrink-0 rounded-[4px] bg-signal text-white text-sm px-3 py-1.5 hover:bg-signal/90 transition-colors">
                 Add entry
               </button>
             </div>
