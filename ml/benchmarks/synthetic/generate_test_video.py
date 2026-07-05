@@ -1,3 +1,4 @@
+
 """
 Synthetic Phase 1 test video generator.
 
