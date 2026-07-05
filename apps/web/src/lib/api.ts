@@ -135,6 +135,14 @@ export const api = {
       request<OccupancyBucket[]>(`/analytics/occupancy${siteId ? `?site_id=${siteId}` : ""}`, { token }),
     topPlates: (token: string, siteId?: string, days = 30, limit = 10) =>
       request<TopPlate[]>(`/analytics/top-plates?days=${days}&limit=${limit}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    vehicleColors: (token: string, siteId?: string, days = 30) =>
+      request<VehicleColorBucket[]>(`/analytics/vehicle-colors?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    vehicleTypes: (token: string, siteId?: string, days = 30) =>
+      request<VehicleTypeBucket[]>(`/analytics/vehicle-types?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    dwellTime: (token: string, siteId?: string, days = 14) =>
+      request<DwellBucket[]>(`/analytics/dwell-time?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    cameraActivity: (token: string, siteId?: string, days = 7) =>
+      request<CameraActivityRow[]>(`/analytics/camera-activity?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
   },
 
   visitorPasses: {
@@ -450,6 +458,30 @@ export interface OccupancyBucket {
 export interface TopPlate {
   plate_text: string;
   count: number;
+}
+
+export interface VehicleColorBucket {
+  color: string;
+  count: number;
+}
+
+export interface VehicleTypeBucket {
+  type: string;
+  count: number;
+}
+
+export interface DwellBucket {
+  date: string;
+  avg_minutes: number;
+  p95_minutes: number;
+  sessions: number;
+}
+
+export interface CameraActivityRow {
+  camera_id: string;
+  name: string;
+  reads: number;
+  last_event: string | null;
 }
 
 export interface VisitorPass {
