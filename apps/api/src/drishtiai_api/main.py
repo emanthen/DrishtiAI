@@ -13,7 +13,7 @@ from drishtiai_api.limiter import limiter
 from drishtiai_api.log_filter import RedactingFilter
 
 from .config import settings
-from .routers import analytics, audit, auth, cameras, events, gates, health, mfa, notifications, parking, reports, review_queue, sites, system, tariffs, users, vehicles, visitor_passes, watchlists, alerts, ws, webhooks
+from .routers import analytics, audit, auth, cameras, events, gates, health, mfa, notifications, parking, plates, reports, review_queue, sites, system, tariffs, users, vehicles, visitor_passes, watchlists, alerts, ws, webhooks
 from .routers import stream
 
 # Attach redacting filter to the root logger so no handler leaks secrets.
@@ -65,6 +65,7 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(stream.router, prefix="/stream", tags=["stream"])
 app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(audit.router, prefix="/audit-logs", tags=["audit"])
+app.include_router(plates.router, prefix="/plates", tags=["plates"])
 app.include_router(vehicles.router, prefix="/vehicles", tags=["vehicles"])
 app.include_router(review_queue.router, prefix="/review-queue", tags=["review-queue"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
