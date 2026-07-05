@@ -24,6 +24,12 @@ class CameraRole(str, PyEnum):
     general = "general"
 
 
+class PlateRegion(str, PyEnum):
+    embossed = "embossed"      # standard Latin embossed plates (default)
+    devanagari = "devanagari"  # Devanagari-script plates (specialty vehicles)
+    auto = "auto"              # auto-detect per frame
+
+
 class HealthStatus(str, PyEnum):
     online = "online"
     offline = "offline"
@@ -44,6 +50,7 @@ class Camera(Base):
     fps: Mapped[float | None]
     gpu_slot: Mapped[int | None]
     role: Mapped[CameraRole] = mapped_column(default=CameraRole.general)
+    plate_region: Mapped[PlateRegion] = mapped_column(String(20), default=PlateRegion.auto)
     ptz: Mapped[bool] = mapped_column(Boolean, default=False)
     onvif_profile: Mapped[str | None] = mapped_column(String(64))
     health_status: Mapped[HealthStatus] = mapped_column(default=HealthStatus.unknown)

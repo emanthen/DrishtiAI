@@ -25,6 +25,7 @@ from drishtiai_pipeline.health import CameraHealthReporter
 from drishtiai_pipeline.ocr import PlateDetection, detect_plates
 from drishtiai_pipeline.voter import PlateVoter
 from drishtiai_pipeline.writer import write_plate_event
+from drishtiai_pipeline.review_queue import write_review_item
 from drishtiai_pipeline import alert_engine, gate, parking_session
 
 logging.basicConfig(
@@ -65,8 +66,25 @@ def process_camera(camera: Camera) -> None:
     dedup = PlateDeduplicator(window_seconds=settings.pipeline_dedup_seconds)
 
     def _on_consensus(det: PlateDetection) -> None:
+        if det.confidence < settings.pipeline_min_confidence:
+            return  # below absolute floor — discard
+
         if det.confidence < settings.pipeline_ocr_confidence_threshold:
+            # Between floor and threshold: route to review queue (training flywheel)
+            if settings.pipeline_review_queue_enabled:
+                try:
+                    write_review_item(
+                        detection=det,
+                        camera_id=camera_id,
+                        site_id=site_id,
+                        db=db,
+                        minio_client=minio,
+                        snapshot_bucket=settings.minio_bucket_snapshots,
+                    )
+                except Exception:
+                    logger.exception("Failed to queue review item for %s", det.text)
             return
+
         if not dedup.is_new(det.text):
             return
         try:
