@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  BarChart, Bar, AreaChart, Area,
+  BarChart, Bar, AreaChart, Area, LineChart, Line, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { useAuthStore } from "@/store/auth";
 import {
   api,
   AnalyticsOverview, HourlyBucket, DailyRevenue, OccupancyBucket, TopPlate,
+  VehicleColorBucket, VehicleTypeBucket, DwellBucket, CameraActivityRow,
   Site,
 } from "@/lib/api";
 
@@ -20,6 +21,13 @@ const STEEL   = "#5B6470";
 
 const HOUR_LABELS = ["12a","1","2","3","4","5","6","7","8","9","10","11",
                      "12p","1","2","3","4","5","6","7","8","9","10","11"];
+
+const COLOR_HEX: Record<string, string> = {
+  white: "#f5f5f5", black: "#1a1a1a", silver: "#c0c0c0", grey: "#808080",
+  red: "#dc2626", blue: "#2563eb", green: "#16a34a", yellow: "#ca8a04",
+  orange: "#ea580c", brown: "#92400e", maroon: "#881337", other: "#6b7280",
+  unknown: "#6b7280",
+};
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({
@@ -54,12 +62,16 @@ export default function AnalyticsPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<string | undefined>(undefined);
 
-  const [overview, setOverview]       = useState<AnalyticsOverview | null>(null);
-  const [hourly, setHourly]           = useState<HourlyBucket[]>([]);
-  const [revenue, setRevenue]         = useState<DailyRevenue[]>([]);
-  const [occupancy, setOccupancy]     = useState<OccupancyBucket[]>([]);
-  const [topPlates, setTopPlates]     = useState<TopPlate[]>([]);
-  const [loading, setLoading]         = useState(true);
+  const [overview, setOverview]             = useState<AnalyticsOverview | null>(null);
+  const [hourly, setHourly]                 = useState<HourlyBucket[]>([]);
+  const [revenue, setRevenue]               = useState<DailyRevenue[]>([]);
+  const [occupancy, setOccupancy]           = useState<OccupancyBucket[]>([]);
+  const [topPlates, setTopPlates]           = useState<TopPlate[]>([]);
+  const [vehicleColors, setVehicleColors]   = useState<VehicleColorBucket[]>([]);
+  const [vehicleTypes, setVehicleTypes]     = useState<VehicleTypeBucket[]>([]);
+  const [dwellTime, setDwellTime]           = useState<DwellBucket[]>([]);
+  const [cameraActivity, setCameraActivity] = useState<CameraActivityRow[]>([]);
+  const [loading, setLoading]               = useState(true);
 
   // Fetch site list once
   useEffect(() => {
@@ -74,18 +86,26 @@ export default function AnalyticsPage() {
     if (!accessToken) return;
     setLoading(true);
     try {
-      const [ov, hr, rv, oc, tp] = await Promise.all([
+      const [ov, hr, rv, oc, tp, vc, vt, dt, ca] = await Promise.all([
         api.analytics.overview(accessToken, siteId),
         api.analytics.hourlyTraffic(accessToken, siteId, 7),
         api.analytics.dailyRevenue(accessToken, siteId, 14),
         api.analytics.occupancy(accessToken, siteId),
         api.analytics.topPlates(accessToken, siteId, 30, 10),
+        api.analytics.vehicleColors(accessToken, siteId, 30),
+        api.analytics.vehicleTypes(accessToken, siteId, 30),
+        api.analytics.dwellTime(accessToken, siteId, 14),
+        api.analytics.cameraActivity(accessToken, siteId, 7),
       ]);
       setOverview(ov);
       setHourly(hr);
       setRevenue(rv);
       setOccupancy(oc);
       setTopPlates(tp);
+      setVehicleColors(vc);
+      setVehicleTypes(vt);
+      setDwellTime(dt);
+      setCameraActivity(ca);
     } catch {
       // silent — partial data is fine
     } finally {
@@ -250,6 +270,132 @@ export default function AnalyticsPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </ChartCard>
+          )}
+
+          {/* Charts row 2 — vehicle insights */}
+          {(vehicleColors.length > 0 || vehicleTypes.length > 0) && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {vehicleColors.length > 0 && (
+                <ChartCard title="Vehicle colors" sub="distinct vehicles by color · last 30 days">
+                  <ResponsiveContainer width="100%" height={Math.max(120, vehicleColors.length * 30)}>
+                    <BarChart
+                      data={vehicleColors}
+                      layout="vertical"
+                      margin={{ top: 4, right: 32, left: 52, bottom: 0 }}
+                    >
+                      <XAxis type="number" tick={{ fontSize: 10, fill: STEEL }} allowDecimals={false} />
+                      <YAxis
+                        type="category"
+                        dataKey="color"
+                        tick={{ fontSize: 10, fill: STEEL }}
+                        width={48}
+                      />
+                      <Tooltip
+                        {...TooltipStyle}
+                        formatter={(v: number) => [v, "vehicles"]}
+                      />
+                      <Bar dataKey="count" radius={[0, 3, 3, 0]} maxBarSize={18}>
+                        {vehicleColors.map((entry) => (
+                          <Cell key={entry.color} fill={COLOR_HEX[entry.color] ?? SIGNAL} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              )}
+              {vehicleTypes.length > 0 && (
+                <ChartCard title="Vehicle types" sub="distinct vehicles by type · last 30 days">
+                  <ResponsiveContainer width="100%" height={Math.max(120, vehicleTypes.length * 30)}>
+                    <BarChart
+                      data={vehicleTypes}
+                      layout="vertical"
+                      margin={{ top: 4, right: 32, left: 52, bottom: 0 }}
+                    >
+                      <XAxis type="number" tick={{ fontSize: 10, fill: STEEL }} allowDecimals={false} />
+                      <YAxis
+                        type="category"
+                        dataKey="type"
+                        tick={{ fontSize: 10, fill: STEEL }}
+                        width={48}
+                      />
+                      <Tooltip
+                        {...TooltipStyle}
+                        formatter={(v: number) => [v, "vehicles"]}
+                      />
+                      <Bar dataKey="count" fill={SIGNAL} radius={[0, 3, 3, 0]} maxBarSize={18} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              )}
+            </div>
+          )}
+
+          {/* Dwell time */}
+          {dwellTime.length > 0 && (
+            <ChartCard title="Dwell time" sub="avg (solid) and p95 (dashed) parking duration · minutes · last 14 days">
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={dwellTime} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(d: string) => d.slice(5)}
+                    tick={{ fontSize: 10, fill: STEEL }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis tick={{ fontSize: 10, fill: STEEL }} allowDecimals={false} unit=" m" />
+                  <Tooltip
+                    {...TooltipStyle}
+                    formatter={(v: number, name: string) => [
+                      `${v} min`,
+                      name === "avg_minutes" ? "Avg" : "p95",
+                    ]}
+                  />
+                  <Line
+                    dataKey="avg_minutes"
+                    stroke={SIGNAL}
+                    strokeWidth={2}
+                    dot={false}
+                    name="avg_minutes"
+                  />
+                  <Line
+                    dataKey="p95_minutes"
+                    stroke={ALERT}
+                    strokeWidth={2}
+                    dot={false}
+                    strokeDasharray="4 2"
+                    name="p95_minutes"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          )}
+
+          {/* Camera activity */}
+          {cameraActivity.length > 0 && (
+            <ChartCard title="Camera activity" sub="plate reads per camera · last 7 days">
+              <div className="space-y-2 pt-1">
+                {cameraActivity.map((cam, i) => {
+                  const maxReads = cameraActivity[0]?.reads ?? 1;
+                  return (
+                    <div key={cam.camera_id} className="flex items-center gap-3">
+                      <span className="text-[11px] text-steel w-4 text-right shrink-0">{i + 1}</span>
+                      <span className="text-xs text-ink dark:text-bone w-40 truncate shrink-0" title={cam.name}>
+                        {cam.name}
+                      </span>
+                      <div className="flex-1 bg-hairline dark:bg-hairline-dark rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-2 rounded-full bg-signal transition-all"
+                          style={{ width: `${Math.round((cam.reads / Math.max(maxReads, 1)) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs tabular-nums text-steel w-10 text-right shrink-0">
+                        {cam.reads}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </ChartCard>
           )}

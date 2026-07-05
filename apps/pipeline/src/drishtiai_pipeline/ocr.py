@@ -226,9 +226,10 @@ def _normalize_np_plate(text: str) -> str | None:
 class PlateDetection:
     text: str
     confidence: float
-    bbox: list[list[float]]   # [[x1,y1],[x2,y1],[x2,y2],[x1,y2]] in frame coords
-    crop: np.ndarray           # BGR crop of the plate region (pre-processed)
-    sharpness: float = 0.0    # Laplacian variance — higher = sharper frame
+    bbox: list[list[float]]          # [[x1,y1],[x2,y1],[x2,y2],[x1,y2]] in frame coords
+    crop: np.ndarray                  # BGR crop of the plate region (pre-processed)
+    sharpness: float = 0.0           # Laplacian variance — higher = sharper frame
+    vehicle_crop: np.ndarray | None = None  # BGR crop of the vehicle body above the plate
 
 
 def _measure_sharpness(img: np.ndarray) -> float:
@@ -401,6 +402,11 @@ def detect_plates(frame_bgr: np.ndarray) -> list[PlateDetection]:
             if crop.size == 0:
                 continue
 
+            # Vehicle body region: 2× plate height directly above the plate
+            ph = y2 - y1
+            vy1 = max(0, y1 - 2 * ph)
+            vehicle_region: np.ndarray | None = frame_bgr[vy1:y1, x1:x2] if vy1 < y1 else None
+
             crop_h, crop_w = crop.shape[:2]
             aspect = crop_w / max(crop_h, 1)
 
@@ -409,11 +415,14 @@ def detect_plates(frame_bgr: np.ndarray) -> list[PlateDetection]:
             if aspect < _MOTO_ASPECT_MAX:
                 moto = _try_two_row(crop, offset_x=x1, offset_y=y1)
                 if moto is not None:
+                    moto.vehicle_crop = vehicle_region
                     results.append(moto)
                     continue  # don't also run single-row on this candidate
 
             processed = _preprocess_crop(crop) if settings.pipeline_ocr_preprocess else crop
             found = _run_ocr_on_image(processed, offset_x=x1, offset_y=y1)
+            for det in found:
+                det.vehicle_crop = vehicle_region
             results.extend(found)
     else:
         # Fallback: full-frame OCR (slower, more false positives)

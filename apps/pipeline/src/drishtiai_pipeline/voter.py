@@ -57,6 +57,7 @@ class _Track:
             bbox=w.bbox,
             crop=w.crop,
             sharpness=w.sharpness,
+            vehicle_crop=w.vehicle_crop,
         )
 
 

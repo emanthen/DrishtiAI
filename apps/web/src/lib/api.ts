@@ -111,6 +111,19 @@ export const api = {
       }),
   },
 
+  vehicles: {
+    list: (token: string, params: VehiclesParams = {}) => {
+      const q = new URLSearchParams();
+      if (params.color) q.set("color", params.color);
+      if (params.type) q.set("type", params.type);
+      if (params.plate) q.set("plate", params.plate);
+      if (params.limit) q.set("limit", String(params.limit));
+      return request<VehicleDetail[]>(`/vehicles?${q}`, { token });
+    },
+    get: (token: string, id: string) =>
+      request<VehicleDetail>(`/vehicles/${id}`, { token }),
+  },
+
   analytics: {
     overview: (token: string, siteId?: string) =>
       request<AnalyticsOverview>(`/analytics/overview${siteId ? `?site_id=${siteId}` : ""}`, { token }),
@@ -122,6 +135,14 @@ export const api = {
       request<OccupancyBucket[]>(`/analytics/occupancy${siteId ? `?site_id=${siteId}` : ""}`, { token }),
     topPlates: (token: string, siteId?: string, days = 30, limit = 10) =>
       request<TopPlate[]>(`/analytics/top-plates?days=${days}&limit=${limit}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    vehicleColors: (token: string, siteId?: string, days = 30) =>
+      request<VehicleColorBucket[]>(`/analytics/vehicle-colors?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    vehicleTypes: (token: string, siteId?: string, days = 30) =>
+      request<VehicleTypeBucket[]>(`/analytics/vehicle-types?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    dwellTime: (token: string, siteId?: string, days = 14) =>
+      request<DwellBucket[]>(`/analytics/dwell-time?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
+    cameraActivity: (token: string, siteId?: string, days = 7) =>
+      request<CameraActivityRow[]>(`/analytics/camera-activity?days=${days}${siteId ? `&site_id=${siteId}` : ""}`, { token }),
   },
 
   visitorPasses: {
@@ -273,6 +294,14 @@ export interface PlateOut {
   format_class: string;
 }
 
+export interface VehicleOut {
+  id: string;
+  type: string | null;
+  color: string | null;
+  make: string | null;
+  model: string | null;
+}
+
 export interface Event {
   id: string;
   site_id: string;
@@ -285,6 +314,7 @@ export interface Event {
   clip_key: string | null;
   confidence: number | null;
   plate: PlateOut | null;
+  vehicle: VehicleOut | null;
 }
 
 export interface EventsPage {
@@ -300,6 +330,26 @@ export interface EventsParams {
   to?: string;
   limit?: number;
   cursor?: string;
+}
+
+export interface VehicleDetail {
+  id: string;
+  type: string | null;
+  type_confidence: number | null;
+  color: string | null;
+  color_confidence: number | null;
+  make: string | null;
+  model: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  plates: { id: string; text: string; format_class: string }[];
+}
+
+export interface VehiclesParams {
+  color?: string;
+  type?: string;
+  plate?: string;
+  limit?: number;
 }
 
 export interface Site {
@@ -408,6 +458,30 @@ export interface OccupancyBucket {
 export interface TopPlate {
   plate_text: string;
   count: number;
+}
+
+export interface VehicleColorBucket {
+  color: string;
+  count: number;
+}
+
+export interface VehicleTypeBucket {
+  type: string;
+  count: number;
+}
+
+export interface DwellBucket {
+  date: string;
+  avg_minutes: number;
+  p95_minutes: number;
+  sessions: number;
+}
+
+export interface CameraActivityRow {
+  camera_id: string;
+  name: string;
+  reads: number;
+  last_event: string | null;
 }
 
 export interface VisitorPass {

@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 
 from drishtiai_shared.models.event import Event, EventKind
 from drishtiai_shared.models.plate import Plate
+from drishtiai_shared.models.vehicle import Vehicle
 from drishtiai_api.deps import CurrentUser, DbSession
 from drishtiai_api.storage import get_presigned_url
 
@@ -21,6 +22,16 @@ class PlateOut(BaseModel):
     text: str
     region: str | None
     format_class: str
+
+    model_config = {"from_attributes": True}
+
+
+class VehicleOut(BaseModel):
+    id: uuid.UUID
+    type: str | None
+    color: str | None
+    make: str | None
+    model: str | None
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +48,7 @@ class EventOut(BaseModel):
     clip_key: str | None
     confidence: float | None
     plate: PlateOut | None = None
+    vehicle: VehicleOut | None = None
 
     model_config = {"from_attributes": True}
 
@@ -61,7 +73,7 @@ async def list_events(
 ) -> EventsPage:
     q = (
         select(Event)
-        .options(joinedload(Event.plate))
+        .options(joinedload(Event.plate), joinedload(Event.vehicle))
         .order_by(Event.ts.desc())
     )
 
@@ -108,7 +120,9 @@ async def list_events(
 @router.get("/{event_id}", response_model=EventOut)
 async def get_event(event_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Event:
     event = db.scalar(
-        select(Event).options(joinedload(Event.plate)).where(Event.id == event_id)
+        select(Event)
+        .options(joinedload(Event.plate), joinedload(Event.vehicle))
+        .where(Event.id == event_id)
     )
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")

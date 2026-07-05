@@ -269,3 +269,135 @@ async def top_plates(
     ), {"sid": sid, "cutoff": cutoff, "lim": limit}).all()
 
     return [TopPlate(plate_text=r.plate_text, count=r.count) for r in rows]
+
+
+# ── Vehicle color distribution ────────────────────────────────────────────────
+
+class VehicleColorBucket(BaseModel):
+    color: str
+    count: int
+
+
+@router.get("/vehicle-colors", response_model=list[VehicleColorBucket])
+async def vehicle_colors(
+    current_user: CurrentUser,
+    db: DbSession,
+    site_id: Annotated[uuid.UUID | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+) -> list[VehicleColorBucket]:
+    """Distinct vehicle count grouped by color for the last N days."""
+    sid = _resolve_site(site_id, current_user, db)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    rows = db.execute(text(
+        "SELECT COALESCE(v.color, 'unknown') AS color, COUNT(DISTINCT v.id)::int AS count "
+        "FROM events e "
+        "JOIN vehicles v ON v.id = e.vehicle_id "
+        "WHERE e.site_id = :sid AND e.kind = 'plate_read' "
+        "  AND e.ts >= :cutoff AND e.vehicle_id IS NOT NULL "
+        "GROUP BY color ORDER BY count DESC"
+    ), {"sid": sid, "cutoff": cutoff}).all()
+    return [VehicleColorBucket(color=r.color, count=r.count) for r in rows]
+
+
+# ── Vehicle type distribution ─────────────────────────────────────────────────
+
+class VehicleTypeBucket(BaseModel):
+    type: str
+    count: int
+
+
+@router.get("/vehicle-types", response_model=list[VehicleTypeBucket])
+async def vehicle_types(
+    current_user: CurrentUser,
+    db: DbSession,
+    site_id: Annotated[uuid.UUID | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+) -> list[VehicleTypeBucket]:
+    """Distinct vehicle count grouped by type for the last N days."""
+    sid = _resolve_site(site_id, current_user, db)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    rows = db.execute(text(
+        "SELECT COALESCE(v.type, 'unknown') AS type, COUNT(DISTINCT v.id)::int AS count "
+        "FROM events e "
+        "JOIN vehicles v ON v.id = e.vehicle_id "
+        "WHERE e.site_id = :sid AND e.kind = 'plate_read' "
+        "  AND e.ts >= :cutoff AND e.vehicle_id IS NOT NULL "
+        "GROUP BY type ORDER BY count DESC"
+    ), {"sid": sid, "cutoff": cutoff}).all()
+    return [VehicleTypeBucket(type=r.type, count=r.count) for r in rows]
+
+
+# ── Dwell time by day ─────────────────────────────────────────────────────────
+
+class DwellBucket(BaseModel):
+    date: str           # YYYY-MM-DD
+    avg_minutes: float
+    p95_minutes: float
+    sessions: int
+
+
+@router.get("/dwell-time", response_model=list[DwellBucket])
+async def dwell_time(
+    current_user: CurrentUser,
+    db: DbSession,
+    site_id: Annotated[uuid.UUID | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=90)] = 14,
+) -> list[DwellBucket]:
+    """Average and p95 parking dwell time per day for the last N days."""
+    sid = _resolve_site(site_id, current_user, db)
+    tz = _site_tz(sid, db)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    rows = db.execute(text(
+        f"SELECT (created_at AT TIME ZONE '{tz}')::date::text AS date, "
+        "       ROUND(AVG(duration_s) / 60.0, 1)::float AS avg_minutes, "
+        "       ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_s) / 60.0, 1)::float AS p95_minutes, "
+        "       COUNT(*)::int AS sessions "
+        "FROM parking_sessions "
+        "WHERE site_id = :sid AND duration_s IS NOT NULL "
+        "  AND created_at >= :cutoff "
+        "GROUP BY date ORDER BY date"
+    ), {"sid": sid, "cutoff": cutoff}).all()
+    return [
+        DwellBucket(
+            date=r.date,
+            avg_minutes=float(r.avg_minutes),
+            p95_minutes=float(r.p95_minutes),
+            sessions=r.sessions,
+        )
+        for r in rows
+    ]
+
+
+# ── Camera activity ───────────────────────────────────────────────────────────
+
+class CameraActivityRow(BaseModel):
+    camera_id: str
+    name: str
+    reads: int
+    last_event: str | None
+
+
+@router.get("/camera-activity", response_model=list[CameraActivityRow])
+async def camera_activity(
+    current_user: CurrentUser,
+    db: DbSession,
+    site_id: Annotated[uuid.UUID | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=90)] = 7,
+) -> list[CameraActivityRow]:
+    """Per-camera plate read count and most recent event timestamp for the last N days."""
+    sid = _resolve_site(site_id, current_user, db)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    rows = db.execute(text(
+        "SELECT c.id::text AS camera_id, c.name, "
+        "       COUNT(e.id)::int AS reads, "
+        "       MAX(e.ts)::text AS last_event "
+        "FROM cameras c "
+        "LEFT JOIN events e ON e.camera_id = c.id "
+        "  AND e.kind = 'plate_read' AND e.ts >= :cutoff "
+        "WHERE c.site_id = :sid "
+        "GROUP BY c.id, c.name ORDER BY reads DESC"
+    ), {"sid": sid, "cutoff": cutoff}).all()
+    return [
+        CameraActivityRow(camera_id=r.camera_id, name=r.name, reads=r.reads, last_event=r.last_event)
+        for r in rows
+    ]

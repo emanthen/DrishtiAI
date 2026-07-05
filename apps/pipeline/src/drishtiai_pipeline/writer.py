@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from drishtiai_shared.models.event import Event, EventKind
 from drishtiai_shared.models.plate import Plate, PlateFormat
+from drishtiai_shared.models.vehicle import Vehicle
+from drishtiai_pipeline.color_detect import detect_color
 from drishtiai_pipeline.ocr import PlateDetection
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,15 @@ def write_plate_event(
 ) -> Event:
     ts = _now_utc()
 
-    # 1. Upsert Plate record
+    # 1. Detect vehicle color from the body region above the plate (if available)
+    vehicle_color = None
+    vehicle_color_conf = 0.0
+    if detection.vehicle_crop is not None and detection.vehicle_crop.size > 0:
+        color_result = detect_color(detection.vehicle_crop)
+        if color_result:
+            vehicle_color, vehicle_color_conf = color_result
+
+    # 2. Upsert Plate record
     from sqlalchemy import select
     existing_plate = db.scalar(select(Plate).where(Plate.text == detection.text))
     if existing_plate is None:
@@ -51,7 +61,28 @@ def write_plate_event(
     else:
         plate = existing_plate
 
-    # 2. Upload snapshot to MinIO
+    # 3. Upsert Vehicle linked to this plate
+    vehicle: Vehicle
+    if plate.vehicle_id is not None:
+        vehicle = db.get(Vehicle, plate.vehicle_id)  # type: ignore[assignment]
+        vehicle.last_seen = ts
+        # Update color only when the new observation is more confident
+        if vehicle_color and vehicle_color_conf > (vehicle.color_confidence or 0.0):
+            vehicle.color = vehicle_color.value
+            vehicle.color_confidence = vehicle_color_conf
+    else:
+        vehicle = Vehicle(
+            id=uuid.uuid4(),
+            first_seen=ts,
+            last_seen=ts,
+            color=vehicle_color.value if vehicle_color else None,
+            color_confidence=vehicle_color_conf if vehicle_color else None,
+        )
+        db.add(vehicle)
+        db.flush()
+        plate.vehicle_id = vehicle.id
+
+    # 4. Upload snapshot to MinIO
     snapshot_key: str | None = None
     if detection.crop is not None and detection.crop.size > 0:
         try:
@@ -69,13 +100,14 @@ def write_plate_event(
             logger.exception("Failed to upload snapshot for plate %s", detection.text)
             snapshot_key = None
 
-    # 3. Write Event to Postgres
+    # 5. Write Event to Postgres
     event = Event(
         id=uuid.uuid4(),
         site_id=site_id,
         camera_id=camera_id,
         ts=ts,
         kind=EventKind.plate_read,
+        vehicle_id=vehicle.id,
         plate_id=plate.id,
         snapshot_key=snapshot_key,
         confidence=detection.confidence,
@@ -84,7 +116,7 @@ def write_plate_event(
     db.add(event)
     db.commit()
 
-    # 4. Publish to Redis
+    # 6. Publish to Redis
     try:
         payload = json.dumps({
             "event_id": str(event.id),
