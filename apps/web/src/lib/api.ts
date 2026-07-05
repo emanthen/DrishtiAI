@@ -111,6 +111,19 @@ export const api = {
       }),
   },
 
+  system: {
+    health: (token: string) =>
+      request<SystemHealth>("/system/health", { token }),
+    dbStats: (token: string) =>
+      request<DbStats>("/system/db-stats", { token }),
+    dropOldPartitions: (token: string, olderThanMonths = 12) =>
+      request<{ dropped: string[] }>(`/system/drop-old-partitions?older_than_months=${olderThanMonths}`, { method: "POST", body: "{}", token }),
+    retentionPolicies: (token: string, siteId?: string) =>
+      request<RetentionPolicy[]>(`/system/retention-policies${siteId ? `?site_id=${siteId}` : ""}`, { token }),
+    upsertRetentionPolicy: (token: string, body: { site_id: string; data_class: string; retain_days: number }) =>
+      request<RetentionPolicy>("/system/retention-policies", { method: "PUT", body: JSON.stringify(body), token }),
+  },
+
   plates: {
     search: (token: string, q: string, siteId?: string, limit = 20) =>
       request<PlateSearchResult[]>(
@@ -535,6 +548,39 @@ export interface CameraSighting {
   count: number;
   first_seen: string;
   last_seen: string;
+}
+
+export interface ComponentStatus {
+  status: "ok" | "error";
+  detail: string | null;
+}
+
+export interface SystemHealth {
+  ok: boolean;
+  api: ComponentStatus;
+  database: ComponentStatus;
+  redis: ComponentStatus;
+  minio: ComponentStatus;
+  pipeline: ComponentStatus;
+  partitions: ComponentStatus;
+}
+
+export interface PartitionInfo {
+  name: string;
+  bounds: string;
+  row_estimate: number;
+}
+
+export interface DbStats {
+  partitions: PartitionInfo[];
+  total_event_estimate: number;
+}
+
+export interface RetentionPolicy {
+  id: string;
+  site_id: string;
+  data_class: string;
+  retain_days: number;
 }
 
 export interface VisitorPass {

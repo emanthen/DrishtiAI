@@ -20,9 +20,23 @@ from .routers import stream
 logging.getLogger().addFilter(RedactingFilter())
 
 
+def _startup_partitions() -> None:
+    from drishtiai_shared.db import SessionLocal
+    from drishtiai_api.partition_manager import ensure_partitions
+    db = SessionLocal()
+    try:
+        ensure_partitions(db)
+    except Exception:
+        logging.getLogger(__name__).warning("Partition ensure failed at startup — run migration 0007")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _startup_partitions)
     yield
     await app.state.redis.aclose()
 
