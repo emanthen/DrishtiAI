@@ -111,6 +111,19 @@ export const api = {
       }),
   },
 
+  vehicles: {
+    list: (token: string, params: VehiclesParams = {}) => {
+      const q = new URLSearchParams();
+      if (params.color) q.set("color", params.color);
+      if (params.type) q.set("type", params.type);
+      if (params.plate) q.set("plate", params.plate);
+      if (params.limit) q.set("limit", String(params.limit));
+      return request<VehicleDetail[]>(`/vehicles?${q}`, { token });
+    },
+    get: (token: string, id: string) =>
+      request<VehicleDetail>(`/vehicles/${id}`, { token }),
+  },
+
   analytics: {
     overview: (token: string, siteId?: string) =>
       request<AnalyticsOverview>(`/analytics/overview${siteId ? `?site_id=${siteId}` : ""}`, { token }),
@@ -273,6 +286,14 @@ export interface PlateOut {
   format_class: string;
 }
 
+export interface VehicleOut {
+  id: string;
+  type: string | null;
+  color: string | null;
+  make: string | null;
+  model: string | null;
+}
+
 export interface Event {
   id: string;
   site_id: string;
@@ -285,6 +306,7 @@ export interface Event {
   clip_key: string | null;
   confidence: number | null;
   plate: PlateOut | null;
+  vehicle: VehicleOut | null;
 }
 
 export interface EventsPage {
@@ -300,6 +322,26 @@ export interface EventsParams {
   to?: string;
   limit?: number;
   cursor?: string;
+}
+
+export interface VehicleDetail {
+  id: string;
+  type: string | null;
+  type_confidence: number | null;
+  color: string | null;
+  color_confidence: number | null;
+  make: string | null;
+  model: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  plates: { id: string; text: string; format_class: string }[];
+}
+
+export interface VehiclesParams {
+  color?: string;
+  type?: string;
+  plate?: string;
+  limit?: number;
 }
 
 export interface Site {

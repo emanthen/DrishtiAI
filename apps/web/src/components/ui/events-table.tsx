@@ -43,6 +43,9 @@ export function EventsTable({ events, isLoading, newEventIds }: EventsTableProps
               Kind
             </th>
             <th className="py-2 px-3 text-left text-xs font-medium text-steel uppercase tracking-wide">
+              Vehicle
+            </th>
+            <th className="py-2 px-3 text-left text-xs font-medium text-steel uppercase tracking-wide">
               Camera
             </th>
           </tr>
@@ -75,6 +78,16 @@ export function EventsTable({ events, isLoading, newEventIds }: EventsTableProps
               <td className="py-2 px-3">
                 <KindChip kind={event.kind} />
               </td>
+              <td className="py-2 px-3">
+                {event.vehicle?.color ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <ColorDot color={event.vehicle.color} />
+                    <span className="text-xs text-steel capitalize">{event.vehicle.color}</span>
+                  </span>
+                ) : (
+                  <span className="text-steel text-xs">—</span>
+                )}
+              </td>
               <td className="py-2 px-3 font-mono text-xs text-steel">
                 {event.camera_id.slice(0, 8)}…
               </td>
@@ -100,5 +113,31 @@ function KindChip({ kind }: { kind: string }) {
     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${cfg.cls}`}>
       {cfg.label}
     </span>
+  );
+}
+
+const COLOR_HEX: Record<string, string> = {
+  white:  "#f5f5f5",
+  black:  "#1a1a1a",
+  silver: "#c0c0c0",
+  grey:   "#808080",
+  red:    "#dc2626",
+  blue:   "#2563eb",
+  green:  "#16a34a",
+  yellow: "#ca8a04",
+  orange: "#ea580c",
+  brown:  "#92400e",
+  maroon: "#881337",
+  other:  "#6b7280",
+};
+
+function ColorDot({ color }: { color: string }) {
+  const hex = COLOR_HEX[color] ?? "#6b7280";
+  return (
+    <span
+      className="inline-block w-3 h-3 rounded-full border border-hairline dark:border-hairline-dark shrink-0"
+      style={{ backgroundColor: hex }}
+      title={color}
+    />
   );
 }
