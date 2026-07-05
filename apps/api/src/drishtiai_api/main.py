@@ -13,7 +13,7 @@ from drishtiai_api.limiter import limiter
 from drishtiai_api.log_filter import RedactingFilter
 
 from .config import settings
-from .routers import analytics, audit, auth, cameras, events, gates, health, mfa, notifications, parking, plates, reports, review_queue, sites, system, tariffs, users, vehicles, visitor_passes, watchlists, alerts, ws, webhooks
+from .routers import analytics, audit, auth, cameras, events, gates, health, license as license_router, mfa, notifications, parking, plates, reports, review_queue, sites, system, tariffs, users, vehicles, visitor_passes, watchlists, alerts, ws, webhooks
 from .routers import stream
 
 # Attach redacting filter to the root logger so no handler leaks secrets.
@@ -32,11 +32,22 @@ def _startup_partitions() -> None:
         db.close()
 
 
+def _startup_license() -> None:
+    import drishtiai_licensing.enforcement as enf
+    state, message = enf.initialize()
+    log = logging.getLogger(__name__)
+    if state.value in ("expired", "hardware_mismatch", "invalid"):
+        log.warning("LICENSE %s: %s — smart features suspended", state.value.upper(), message)
+    else:
+        log.info("LICENSE %s: %s", state.value.upper(), message)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _startup_partitions)
+    await loop.run_in_executor(None, _startup_license)
     yield
     await app.state.redis.aclose()
 
@@ -78,6 +89,7 @@ app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(stream.router, prefix="/stream", tags=["stream"])
 app.include_router(system.router, prefix="/system", tags=["system"])
+app.include_router(license_router.router, prefix="/system", tags=["system"])
 app.include_router(audit.router, prefix="/audit-logs", tags=["audit"])
 app.include_router(plates.router, prefix="/plates", tags=["plates"])
 app.include_router(vehicles.router, prefix="/vehicles", tags=["vehicles"])

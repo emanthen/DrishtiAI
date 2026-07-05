@@ -205,7 +205,20 @@ def evaluate_and_trigger(
     """
     Evaluate all enabled GateRules for this camera and fire matching controllers.
     Rules are checked in descending priority order; all matching rules fire.
+
+    Gate safety: if the license is not in an operational state this function
+    returns immediately without sending any controller command. The barrier
+    hardware then follows its own physical default — DrishtiAI never sends a
+    "close" or "lock" command, only "open" pulses.
     """
+    from drishtiai_licensing.enforcement import gate_automation_allowed
+    if not gate_automation_allowed():
+        log.debug(
+            "gate: automation disabled (license not operational) — skipping camera=%s plate=%s",
+            camera_id, plate_text,
+        )
+        return
+
     rules = list(
         db.scalars(
             select(GateRule)

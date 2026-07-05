@@ -6,10 +6,17 @@ import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 import { api, API_BASE } from "@/lib/api";
 
+interface LicenseBanner {
+  level: "warn" | "error";
+  message: string;
+  days_remaining: number | null;
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { accessToken, user, logout } = useAuthStore();
   const [offlineCount, setOfflineCount] = useState(0);
+  const [licenseBanner, setLicenseBanner] = useState<LicenseBanner | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -27,9 +34,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       } catch {}
     }
+    async function checkLicense() {
+      try {
+        const res = await fetch(`${API_BASE}/system/license`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLicenseBanner(data.banner ?? null);
+        }
+      } catch {}
+    }
     checkHealth();
+    checkLicense();
     const id = setInterval(checkHealth, 30_000);
-    return () => clearInterval(id);
+    const licId = setInterval(checkLicense, 60_000);
+    return () => { clearInterval(id); clearInterval(licId); };
   }, [accessToken, router]);
 
   async function handleLogout() {
@@ -85,6 +105,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
+        {licenseBanner && (
+          <div
+            className={
+              licenseBanner.level === "error"
+                ? "bg-alert/10 border-b border-alert/30 px-6 py-2 flex items-center gap-2"
+                : "bg-amber-50 dark:bg-amber-900/20 border-b border-amber-300/50 px-6 py-2 flex items-center gap-2"
+            }
+          >
+            <span
+              className={`inline-flex rounded-full h-2 w-2 ${licenseBanner.level === "error" ? "bg-alert" : "bg-amber-400"}`}
+            />
+            <p
+              className={`text-xs font-semibold ${licenseBanner.level === "error" ? "text-alert" : "text-amber-700 dark:text-amber-300"}`}
+            >
+              {licenseBanner.message}
+              {licenseBanner.days_remaining !== null && licenseBanner.days_remaining > 0
+                ? ` (${licenseBanner.days_remaining} day${licenseBanner.days_remaining !== 1 ? "s" : ""} remaining)`
+                : null}
+            </p>
+          </div>
+        )}
         {offlineCount > 0 && (
           <div className="bg-alert/10 border-b border-alert/30 px-6 py-2 flex items-center gap-2">
             <span className="inline-flex rounded-full h-2 w-2 bg-alert" />
