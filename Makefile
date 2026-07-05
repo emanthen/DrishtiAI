@@ -1,4 +1,4 @@
-.PHONY: dev test lint build clean install help migrate seed seed-dev generate-test-video benchmark
+.PHONY: dev test lint build clean install help migrate seed seed-dev generate-test-video benchmark install-prod test-backup-restore
 
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
@@ -102,3 +102,9 @@ benchmark-11: ## Evaluate Phase 11 OCR quality (recall, precision, CER) against 
 	uv run python ml/benchmarks/eval_phase11.py \
 		--gt ml/benchmarks/phase1_gt.json \
 		--db postgresql://drishtiai:drishtiai@localhost:5432/drishtiai
+
+install-prod: ## Run the production installer (generates secrets, builds images, migrates, seeds)
+	bash deploy/install/install.sh
+
+test-backup-restore: ## Full backup → destroy volume → restore → verify row counts
+	bash deploy/install/test_backup_restore.sh

@@ -86,6 +86,32 @@ jobs:
       - uses: github/codeql-action/autobuild@v3
       - uses: github/codeql-action/analyze@v3
 
+  trivy:
+    name: Trivy container scan
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+    # Build the API image (the most attack-surface-heavy service) and scan it.
+    # Fails on CRITICAL CVEs; HIGH CVEs are reported but do not block.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t drishtiai-api:scan apps/api
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: drishtiai-api:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
   license-check:
     name: License check
     runs-on: ubuntu-24.04

@@ -1,0 +1,147 @@
+name: Backup restore round-trip
+
+on:
+  schedule:
+    # Nightly at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  backup-restore:
+    name: pg_dump → restore → verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Generate test .env
+        run: |
+          PG_PASS=$(openssl rand -hex 16)
+          cat > .env <<EOF
+          POSTGRES_USER=drishtiai
+          POSTGRES_PASSWORD=${PG_PASS}
+          POSTGRES_DB=drishtiai
+          DATABASE_URL=postgresql+psycopg://drishtiai:${PG_PASS}@localhost:5432/drishtiai
+          DJANGO_SECRET_KEY=$(openssl rand -hex 25)
+          DJANGO_DEBUG=false
+          ALLOWED_HOSTS=localhost
+          API_SECRET_KEY=$(openssl rand -hex 25)
+          API_CORS_ORIGINS=http://localhost:3000
+          REDIS_URL=redis://localhost:6379/0
+          MINIO_ROOT_USER=drishtiai
+          MINIO_ROOT_PASSWORD=$(openssl rand -hex 16)
+          MINIO_ENDPOINT=localhost:9000
+          MINIO_ACCESS_KEY=drishtiai
+          MINIO_SECRET_KEY=$(openssl rand -hex 16)
+          MINIO_SECURE=false
+          MINIO_PRESIGNED_TTL_SECONDS=900
+          JWT_PRIVATE_KEY_PEM=placeholder
+          JWT_PUBLIC_KEY_PEM=placeholder
+          JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+          JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+          NEXT_PUBLIC_API_URL=http://localhost:8000
+          NEXT_PUBLIC_WS_URL=ws://localhost:8000
+          PIPELINE_LOG_LEVEL=INFO
+          PIPELINE_CAMERA_IDS=all
+          PIPELINE_FRAME_SAMPLE=5
+          PIPELINE_DEDUP_SECONDS=5
+          PIPELINE_VOTER_WINDOW_S=4.0
+          PIPELINE_VOTER_EXIT_GAP_S=1.5
+          PIPELINE_VOTER_MIN_READS=2
+          PIPELINE_CAPTURE_BACKEND=opencv
+          PIPELINE_OCR_USE_GPU=false
+          PIPELINE_OCR_TWO_STAGE=true
+          PIPELINE_OCR_PREPROCESS=true
+          PIPELINE_MIN_CONFIDENCE=0.40
+          PIPELINE_REVIEW_QUEUE_ENABLED=true
+          SUPERADMIN_EMAIL=admin@drishtiai.local
+          SUPERADMIN_PASSWORD=$(openssl rand -hex 12)
+          GATE_CREDENTIAL_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          GRAFANA_PASSWORD=$(openssl rand -hex 12)
+          EOF
+
+      - name: Start Postgres
+        run: |
+          source .env
+          docker run -d \
+            --name test-postgres \
+            -e POSTGRES_USER=drishtiai \
+            -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+            -e POSTGRES_DB=drishtiai \
+            -p 5432:5432 \
+            postgis/postgis:16-3.4
+          # Wait for ready
+          for i in $(seq 1 30); do
+            docker exec test-postgres pg_isready -U drishtiai -q 2>/dev/null && break
+            sleep 2
+          done
+          docker exec test-postgres pg_isready -U drishtiai -q
+
+      - name: Run migrations
+        run: |
+          source .env
+          cd packages/shared-python
+          uv run alembic upgrade head
+
+      - name: Seed superadmin
+        run: |
+          source .env
+          uv run python apps/api/scripts/seed_superadmin.py
+
+      - name: Record pre-backup counts
+        id: pre
+        run: |
+          source .env
+          USERS=$(docker exec test-postgres psql -U drishtiai -d drishtiai -t -c "SELECT COUNT(*) FROM users;" | tr -d '[:space:]')
+          ORGS=$(docker exec test-postgres psql -U drishtiai -d drishtiai -t -c "SELECT COUNT(*) FROM organizations;" | tr -d '[:space:]')
+          echo "users=$USERS" >> $GITHUB_OUTPUT
+          echo "orgs=$ORGS"   >> $GITHUB_OUTPUT
+          echo "Pre-backup: users=$USERS orgs=$ORGS"
+
+      - name: Take pg_dump backup
+        run: |
+          source .env
+          mkdir -p deploy/backups
+          docker exec test-postgres pg_dump -U drishtiai drishtiai > deploy/backups/ci_test.sql
+          echo "Backup size: $(du -sh deploy/backups/ci_test.sql | cut -f1)"
+
+      - name: Destroy and recreate database
+        run: |
+          source .env
+          docker exec test-postgres psql -U drishtiai -c "DROP DATABASE drishtiai;" postgres
+          docker exec test-postgres psql -U drishtiai -c "CREATE DATABASE drishtiai;" postgres
+
+      - name: Restore from backup
+        run: |
+          source .env
+          docker exec -i test-postgres psql -U drishtiai -d drishtiai < deploy/backups/ci_test.sql
+
+      - name: Verify row counts match
+        run: |
+          source .env
+          POST_USERS=$(docker exec test-postgres psql -U drishtiai -d drishtiai -t -c "SELECT COUNT(*) FROM users;" | tr -d '[:space:]')
+          POST_ORGS=$(docker exec test-postgres psql -U drishtiai -d drishtiai -t -c "SELECT COUNT(*) FROM organizations;" | tr -d '[:space:]')
+          echo "Post-restore: users=$POST_USERS orgs=$POST_ORGS"
+          [[ "$POST_USERS" == "${{ steps.pre.outputs.users }}" ]] || { echo "FAIL: users mismatch"; exit 1; }
+          [[ "$POST_ORGS"  == "${{ steps.pre.outputs.orgs }}"  ]] || { echo "FAIL: orgs mismatch"; exit 1; }
+          echo "✓ Row counts match — backup/restore round-trip passed"
+
+      - name: Stop test Postgres
+        if: always()
+        run: docker rm -f test-postgres 2>/dev/null || true
