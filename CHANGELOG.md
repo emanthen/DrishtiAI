@@ -9,6 +9,54 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-07-05
+
+### Added — v1.0 industry-grade hardening (PRs 1–10)
+
+**Security hardening (PR 1)**
+- JWT RS256 signing, bcrypt password hashing, TOTP MFA, brute-force lockout
+- Rate limiting via slowapi, CORS tightened to explicit origins, security headers on every response
+- `audit_logs` table append-only; `log_action()` helper participates in surrounding transaction
+
+**Nepali OCR benchmark (PR 2)**
+- `ml/benchmarks/eval_nepali_ocr.py` — recall/precision/CER evaluation against Devanagari plate corpus
+- `ml/benchmarks/nepali-ocr.md` — benchmark results and methodology
+
+**Vehicle intelligence (PR 3)**
+- `GET /vehicles` with plate/color/type filtering; `VehicleDetail` schema with plate list + sighting times
+- `GET /review-queue` — low-confidence detections routed to human review flywheel
+
+**Analytics (PR 4)**
+- `/analytics/vehicle-colors`, `/vehicle-types`, `/dwell-time`, `/camera-activity` endpoints
+- Analytics page extended with vehicle color chart (per-color Cell fill), dwell-time LineChart, camera activity ranked list
+
+**Investigation (PR 5)**
+- `GET /plates/search` — pg_trgm trigram fuzzy search scoped to site
+- `GET /plates/{id}/timeline` — cursor-paginated event history with camera names
+- `GET /plates/{id}/camera-sightings` — per-camera read count / first+last seen
+- `/investigate` dashboard page: search → results → detail panel with timeline/sightings tabs
+
+**Scale and reliability (PR 6)**
+- `events` partitioned by month; migration 0007 creates ±3-month partitions; `partition_manager.py` ensures partitions at startup (non-blocking via executor)
+- `GET /system/db-stats`, `POST /system/drop-old-partitions`, `GET|PUT /system/retention-policies`
+- `/system` dashboard with health cards, partition table, two-step destructive confirm, retention policy inline edit
+
+**UI design system (PR 7)**
+- Shared components extracted to `apps/web/src/components/ui/`: `Button`, `Input`, `Select`, `ColorSwatch`, `KindChip`, `PageHeader`, `EmptyState`
+- `COLOR_HEX` and `KIND_STYLES` maps consolidated — removed 4 inline copies
+
+**Demo mode (PR 8)**
+- `seed_dev_data.py` extended: 8 demo vehicles+plates (Nepali format), 2 watchlists, 300 events over 30 days
+- `tests/smoke_test.sh` — 12-endpoint curl smoke test; exits 1 on any non-2xx
+
+**Correctness fixes (PR 9)**
+- Removed duplicate `/login` route (`login/` vs `(auth)/login/` — build-breaking Next.js conflict)
+- Fixed `watchlists/page.tsx`: replaced undefined `input-field`/`btn-primary`/`btn-ghost` classes
+
+**Benchmarks (PR 10)**
+- `ml/benchmarks/synthetic/generate_test_video.py` — dashcam-style MP4 generator with 12 Nepali plates at known timestamps; writes matching ground-truth JSON
+- `ml/benchmarks/eval_phase1.py` — end-to-end Phase 1 evaluation: runs video through pipeline, queries DB, reports recall/latency vs ground truth
+
 ## [0.14.0] — 2026-07-04
 
 ### Added — Phase 14: Audit logging + real system health probes
