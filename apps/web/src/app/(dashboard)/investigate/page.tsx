@@ -4,29 +4,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth";
 import { api, API_BASE, type PlateSearchResult } from "@/lib/api";
+import { KindChip } from "@/components/ui/kind-chip";
+import { COLOR_HEX, ColorSwatch } from "@/components/ui/color-swatch";
 import { formatTs, relativeTime } from "@/lib/utils";
-
-const COLOR_HEX: Record<string, string> = {
-  white: "#f5f5f5", black: "#1a1a1a", silver: "#c0c0c0", grey: "#808080",
-  red: "#dc2626", blue: "#2563eb", green: "#16a34a", yellow: "#ca8a04",
-  orange: "#ea580c", brown: "#92400e", maroon: "#881337", other: "#6b7280",
-};
-
-const KIND_STYLES: Record<string, { label: string; cls: string }> = {
-  plate_read:    { label: "Plate read",    cls: "bg-confirm/15 text-confirm" },
-  watchlist_hit: { label: "Watchlist hit", cls: "bg-alert/15 text-alert" },
-  wrong_way:     { label: "Wrong way",     cls: "bg-alert/15 text-alert" },
-  gate_open:     { label: "Gate open",     cls: "bg-signal/15 text-signal" },
-};
-
-function KindChip({ kind }: { kind: string }) {
-  const cfg = KIND_STYLES[kind] ?? { label: kind, cls: "bg-steel/10 text-steel" };
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  );
-}
 
 export default function InvestigatePage() {
   const { accessToken } = useAuthStore();
@@ -109,13 +89,7 @@ export default function InvestigatePage() {
                   </span>
                   <span className="text-[11px] text-steel capitalize w-24 shrink-0">{r.format_class}</span>
                   {r.vehicle?.color ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="w-3 h-3 rounded-full border border-hairline dark:border-hairline-dark shrink-0"
-                        style={{ backgroundColor: COLOR_HEX[r.vehicle.color] ?? "#6b7280" }}
-                      />
-                      <span className="text-xs text-steel capitalize">{r.vehicle.color}</span>
-                    </span>
+                    <ColorSwatch color={r.vehicle.color} />
                   ) : (
                     <span className="text-xs text-steel/50">no color</span>
                   )}
@@ -145,13 +119,7 @@ export default function InvestigatePage() {
               {selected.text}
             </span>
             {selected.vehicle?.color && (
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="w-3.5 h-3.5 rounded-full border border-hairline dark:border-hairline-dark shrink-0"
-                  style={{ backgroundColor: COLOR_HEX[selected.vehicle.color] ?? "#6b7280" }}
-                />
-                <span className="text-xs text-steel capitalize">{selected.vehicle.color}</span>
-              </span>
+              <ColorSwatch color={selected.vehicle.color} />
             )}
             {selected.vehicle?.type && (
               <span className="text-xs text-steel capitalize">{selected.vehicle.type}</span>

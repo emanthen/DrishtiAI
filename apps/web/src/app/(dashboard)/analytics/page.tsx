@@ -12,6 +12,7 @@ import {
   VehicleColorBucket, VehicleTypeBucket, DwellBucket, CameraActivityRow,
   Site,
 } from "@/lib/api";
+import { COLOR_HEX } from "@/components/ui/color-swatch";
 
 // ── Palette tokens — must match packages/ui/src/tokens/colors.ts ──────────────
 const SIGNAL  = "#2C6EFB";
@@ -21,13 +22,6 @@ const STEEL   = "#5B6470";
 
 const HOUR_LABELS = ["12a","1","2","3","4","5","6","7","8","9","10","11",
                      "12p","1","2","3","4","5","6","7","8","9","10","11"];
-
-const COLOR_HEX: Record<string, string> = {
-  white: "#f5f5f5", black: "#1a1a1a", silver: "#c0c0c0", grey: "#808080",
-  red: "#dc2626", blue: "#2563eb", green: "#16a34a", yellow: "#ca8a04",
-  orange: "#ea580c", brown: "#92400e", maroon: "#881337", other: "#6b7280",
-  unknown: "#6b7280",
-};
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({

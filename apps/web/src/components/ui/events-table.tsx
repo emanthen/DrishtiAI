@@ -1,6 +1,8 @@
 "use client";
 
 import { PlateStrip } from "./plate-strip";
+import { KindChip } from "./kind-chip";
+import { ColorSwatch } from "./color-swatch";
 import { formatTs, relativeTime } from "@/lib/utils";
 import type { Event } from "@/lib/api";
 
@@ -80,10 +82,7 @@ export function EventsTable({ events, isLoading, newEventIds }: EventsTableProps
               </td>
               <td className="py-2 px-3">
                 {event.vehicle?.color ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <ColorDot color={event.vehicle.color} />
-                    <span className="text-xs text-steel capitalize">{event.vehicle.color}</span>
-                  </span>
+                  <ColorSwatch color={event.vehicle.color} />
                 ) : (
                   <span className="text-steel text-xs">—</span>
                 )}
@@ -99,45 +98,3 @@ export function EventsTable({ events, isLoading, newEventIds }: EventsTableProps
   );
 }
 
-const KIND_STYLES: Record<string, { label: string; cls: string }> = {
-  plate_read:   { label: "Plate read",    cls: "bg-confirm/15 text-confirm" },
-  watchlist_hit:{ label: "Watchlist hit", cls: "bg-alert/15 text-alert" },
-  wrong_way:    { label: "Wrong way",     cls: "bg-alert/15 text-alert" },
-  illegal_park: { label: "Illegal park",  cls: "bg-alert/10 text-alert" },
-  gate_open:    { label: "Gate open",     cls: "bg-signal/15 text-signal" },
-};
-
-function KindChip({ kind }: { kind: string }) {
-  const cfg = KIND_STYLES[kind] ?? { label: kind, cls: "bg-steel/10 text-steel" };
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  );
-}
-
-const COLOR_HEX: Record<string, string> = {
-  white:  "#f5f5f5",
-  black:  "#1a1a1a",
-  silver: "#c0c0c0",
-  grey:   "#808080",
-  red:    "#dc2626",
-  blue:   "#2563eb",
-  green:  "#16a34a",
-  yellow: "#ca8a04",
-  orange: "#ea580c",
-  brown:  "#92400e",
-  maroon: "#881337",
-  other:  "#6b7280",
-};
-
-function ColorDot({ color }: { color: string }) {
-  const hex = COLOR_HEX[color] ?? "#6b7280";
-  return (
-    <span
-      className="inline-block w-3 h-3 rounded-full border border-hairline dark:border-hairline-dark shrink-0"
-      style={{ backgroundColor: hex }}
-      title={color}
-    />
-  );
-}
