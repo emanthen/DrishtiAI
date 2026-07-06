@@ -1,4 +1,4 @@
-.PHONY: dev test lint build clean install help migrate seed seed-dev generate-test-video benchmark
+.PHONY: dev test lint build clean install help migrate seed seed-dev generate-test-video benchmark generate-plate-crops benchmark-nepali collect-corrections train-nepali-ocr
 
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
@@ -102,3 +102,27 @@ benchmark-11: ## Evaluate Phase 11 OCR quality (recall, precision, CER) against 
 	uv run python ml/benchmarks/eval_phase11.py \
 		--gt ml/benchmarks/phase1_gt.json \
 		--db postgresql://drishtiai:drishtiai@localhost:5432/drishtiai
+
+generate-plate-crops: ## Generate 500 synthetic Nepali plate crops + ground-truth JSON
+	uv run python ml/benchmarks/synthetic/generate_plate_crops.py \
+		--out-dir ml/benchmarks/nepali_plates_test/ \
+		--gt      ml/benchmarks/nepali_gt.json \
+		--count   500
+
+benchmark-nepali: ## Evaluate Nepali OCR accuracy on synthetic plate crops
+	uv run python ml/benchmarks/eval_nepali_ocr.py \
+		--image-dir ml/benchmarks/nepali_plates_test/ \
+		--gt        ml/benchmarks/nepali_gt.json
+
+collect-corrections: ## Download guard-reviewed OCR corrections from the review queue
+	uv run python ml/plate-ocr/collect_corrections.py \
+		--api-url $${DRISHTIAI_API_URL:-http://localhost:8000} \
+		--out-dir ml/plate-ocr/corrections/
+
+train-nepali-ocr: ## Fine-tune PaddleOCR on Nepali plates (requires GPU + ≥500 corrections)
+	uv run python ml/plate-ocr/prepare_dataset.py \
+		--corrections  ml/plate-ocr/corrections/ \
+		--synthetic    ml/benchmarks/nepali_plates_test/ \
+		--synthetic-gt ml/benchmarks/nepali_gt.json
+	uv run python ml/plate-ocr/fine_tune.py \
+		--config ml/plate-ocr/configs/nepali_embossed.yml
