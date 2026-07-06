@@ -35,6 +35,14 @@ export default function TabLayout() {
         options={{ title: "Home", tabBarLabel: "Home" }}
       />
       <Tabs.Screen
+        name="events"
+        options={{ title: "Live Events", tabBarLabel: "Events" }}
+      />
+      <Tabs.Screen
+        name="parking"
+        options={{ title: "Parking", tabBarLabel: "Parking" }}
+      />
+      <Tabs.Screen
         name="passes"
         options={{ title: "Visitor Passes", tabBarLabel: "Passes" }}
       />

@@ -104,9 +104,73 @@ export const api = {
         token,
       }),
   },
+
+  events: {
+    list: (
+      token: string,
+      params: { limit?: number; cursor?: string; from?: string } = {}
+    ) => {
+      const q = new URLSearchParams();
+      if (params.limit) q.set("limit", String(params.limit));
+      if (params.cursor) q.set("cursor", params.cursor);
+      if (params.from) q.set("from", params.from);
+      return request<EventsPage>(`/events?${q}`, { token });
+    },
+  },
+
+  parking: {
+    listActive: (token: string) =>
+      request<ParkingSession[]>("/parking-sessions/active", { token }),
+    close: (token: string, id: string) =>
+      request<ParkingSession>(`/parking-sessions/${id}/close`, {
+        method: "POST",
+        body: JSON.stringify({}),
+        token,
+      }),
+    markPaid: (token: string, id: string) =>
+      request<ParkingSession>(`/parking-sessions/${id}/mark-paid`, {
+        method: "POST",
+        body: JSON.stringify({}),
+        token,
+      }),
+  },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface PlateOut {
+  id: string;
+  text: string;
+  region: string | null;
+  format_class: string;
+}
+
+export interface Event {
+  id: string;
+  site_id: string;
+  camera_id: string;
+  ts: string;
+  kind: "entry" | "exit" | "parked" | "anpr";
+  confidence: number | null;
+  plate: PlateOut | null;
+  vehicle: { type: string | null; color: string | null } | null;
+}
+
+export interface EventsPage {
+  items: Event[];
+  next_cursor: string | null;
+}
+
+export interface ParkingSession {
+  id: string;
+  site_id: string;
+  plate_text: string | null;
+  entry_ts: string | null;
+  exit_ts: string | null;
+  duration_s: number | null;
+  amount_due: number | null;
+  payment_status: "pending" | "paid" | "waived";
+}
 
 export interface AnalyticsOverview {
   events_today: number;
