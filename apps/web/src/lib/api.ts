@@ -85,8 +85,11 @@ export const api = {
 
   sites: {
     list: (token: string) => request<Site[]>("/sites", { token }),
+    get: (token: string, id: string) => request<Site>(`/sites/${id}`, { token }),
     create: (token: string, body: SiteCreate) =>
       request<Site>("/sites", { method: "POST", body: JSON.stringify(body), token }),
+    patch: (token: string, id: string, body: SitePatch) =>
+      request<Site>(`/sites/${id}`, { method: "PATCH", body: JSON.stringify(body), token }),
   },
 
   watchlists: {
@@ -387,6 +390,8 @@ export interface Site {
   address: string | null;
   timezone: string;
   plate_region: string;
+  gate_expiry_mode: "manual" | "freeflow";
+  record_on_expiry: boolean;
 }
 
 export interface SiteCreate {
@@ -395,6 +400,15 @@ export interface SiteCreate {
   address?: string;
   timezone?: string;
   plate_region?: string;
+}
+
+export interface SitePatch {
+  name?: string;
+  address?: string;
+  timezone?: string;
+  plate_region?: string;
+  gate_expiry_mode?: "manual" | "freeflow";
+  record_on_expiry?: boolean;
 }
 
 export interface Watchlist {
